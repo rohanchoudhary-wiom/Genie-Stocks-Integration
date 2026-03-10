@@ -266,7 +266,7 @@ import datetime as dt
 from lib.data_fetch.get_data import get_test_data, get_g1_distance
 from lib.compute import process
 from lib.geometry.geometric_features import batch_compute_geometry, calculate_adaptive_h
-from step3_simpulate import run_declines_simulation
+from steps.step3_simpulate import run_declines_simulation
 
 
 def evaluate_bucket(df, bucket_name):
@@ -2610,7 +2610,7 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 from lib.geometry.distance import haversine_rad
-from config import EARTH_RADIUS_KILOMETER
+from lib.config import EARTH_RADIUS_KILOMETER
 
 
 def compute_hop_features(df_poly: pd.DataFrame, n_hops: int = 3) -> pd.DataFrame:
