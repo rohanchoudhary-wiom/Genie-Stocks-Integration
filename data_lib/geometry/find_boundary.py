@@ -7,7 +7,7 @@ import os
 from sklearn.cluster import DBSCAN
 import pyproj
 from functools import partial
-import lib.config as config
+import data_lib.config as config
 
 
 def run_find_boundary():

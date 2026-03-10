@@ -5,11 +5,14 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-import lib.config as config
-from lib.data_fetch.get_data import get_g1_distance
-from lib.compute import process as compute_process
-from lib.geometry.geometric_features import calculate_adaptive_h
-
+import data_lib.config as config
+from data_lib.data_fetch.get_data import get_g1_distance
+from data_lib.compute import process as compute_process
+from data_lib.geometry.geometric_features import calculate_adaptive_h
+from data_lib.data_fetch.get_ops_data import build_partner_ops_vector
+from data_lib.gate import run_gates
+from data_lib.feature.ops_features import compute_operational_score
+from data_lib.composite import compute_composite
 
 def run_declines_simulation(df_train, df_poly, df_bound, g1_start, g1_end, reports_dir):
     print("\n--- SIMULATION: DECLINES (G1) ---")
@@ -22,7 +25,12 @@ def run_declines_simulation(df_train, df_poly, df_bound, g1_start, g1_end, repor
     if df_declines.empty:
         print("No declines found in G1 window; simulation skipped")
         return None
-
+    
+    df_ops = build_partner_ops_vector(g1_start, g1_end)
+    df_declines, df_ops = run_gates(df_declines, df_train, df_ops)
+    if not df_ops.empty:
+        df_ops = compute_operational_score(df_ops)
+        
     dfus = compute_process(
         df_train,
         df_declines,
@@ -131,6 +139,7 @@ def run_declines_simulation(df_train, df_poly, df_bound, g1_start, g1_end, repor
 
     dfus["declines_serviceability"] = dfus["declines_classifier_new"]
     #dfus["declines_serviceability"] = np.where((dfus["declines_classifier_new"] == 1) & (dfus['parent_total']>config.PARENT_TOTAL_THRESHOLD), 1, 0)
+    dfus = compute_composite(dfus, df_ops)
 
     df_potential = (
         dfus.groupby(["min_dist_bucket", "declines_serviceability"])
@@ -143,6 +152,10 @@ def run_declines_simulation(df_train, df_poly, df_bound, g1_start, g1_end, repor
         reports_dir, "potential_by_min_dist_bucket_and_final_declines.csv"
     )
     df_potential.to_csv(potential_path, index=False)
+    df_potential_tier = dfus.groupby(["min_dist_bucket", "confidence_tier"]).agg(
+    total=("mobile", "count")).reset_index()
+    df_potential_tier["potential_bookings"] = df_potential_tier["total"] * 0.8
+    df_potential_tier.to_csv(os.path.join(reports_dir, "potential_by_min_dist_bucket_and_confidence_tier.csv"), index=False)
     print(f"Potential declines summary saved to {potential_path}")
     return potential_path
 

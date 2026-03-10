@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 
-import lib.config as config
-import lib.stocks.stocks_config as sc
+import data_lib.config as config
+import data_lib.stocks.stocks_config as sc
 
 
 

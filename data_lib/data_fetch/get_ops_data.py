@@ -7,9 +7,9 @@ Uses the same _query_snowflake_df() helper from get_data.py.
 
 import pandas as pd
 import numpy as np
-from lib.data_fetch.get_data import _query_snowflake_df
-import lib.config as config
-import lib.stocks.stocks_config as sc
+from data_lib.data_fetch.get_data import _query_snowflake_df
+import data_lib.config as config
+import data_lib.stocks.stocks_config as sc
 
 
 # =====================================================================

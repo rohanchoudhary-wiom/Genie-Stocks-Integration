@@ -9,14 +9,14 @@ import os
 from math import radians, cos
 
 # Import Playground Modules
-from lib.config import H_INSTALL, H_DECLINE, WEIGHT_DECLINE, WEIGHT_INSTALL, \
+from data_lib.config import H_INSTALL, H_DECLINE, WEIGHT_DECLINE, WEIGHT_INSTALL, \
     HEX_GRID_SIZES, COMPETITION_SEARCH_RADIUS_DEG, HEX_TILING_RADIUS_KM
-import lib.config as config
-from lib.data_fetch.get_data import get_train_data
-from lib.feature.spatial_weights import build_desirability_field_idw
-from lib.geometry.hex import find_best_hexes, create_hex_grid, compute_hexes
-from lib.geometry.find_boundary import run_find_boundary
-from lib.test import get_overlap
+import data_lib.config as config
+from data_lib.data_fetch.get_data import get_train_data
+from data_lib.feature.spatial_weights import build_desirability_field_idw
+from data_lib.geometry.hex import find_best_hexes, create_hex_grid, compute_hexes
+from data_lib.geometry.find_boundary import run_find_boundary
+from data_lib.test import get_overlap
 
 
 def process_single_partner(partner_id, df_train, bad_se, mid_se):

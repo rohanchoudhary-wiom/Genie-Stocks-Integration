@@ -1,7 +1,7 @@
 from sklearn.neighbors import BallTree
 import numpy as np
 import pandas as pd
-from lib.config import EARTH_RADIUS_METER
+from data_lib.config import EARTH_RADIUS_METER
 
 def build_desirability_field_idw(
     df: pd.DataFrame,

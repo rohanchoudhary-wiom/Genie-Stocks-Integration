@@ -3,7 +3,7 @@ from typing import Optional
 import pandas as pd
 import numpy as np
 
-from lib.data_fetch.wiom_data import WiomData
+from data_lib.data_fetch.wiom_data import WiomData
 
 
 _snowflake_client: Optional[WiomData] = None

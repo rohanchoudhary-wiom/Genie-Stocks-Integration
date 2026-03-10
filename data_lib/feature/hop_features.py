@@ -17,7 +17,7 @@ Plus 3 cross-hop interaction columns:
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
-from lib.geometry.distance import haversine_rad
+from data_lib.geometry.distance import haversine_rad
 from config import EARTH_RADIUS_KILOMETER
 
 

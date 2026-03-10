@@ -5,12 +5,18 @@ from typing import cast
 import pandas as pd
 import numpy as np
 import os
-import lib.config as config
+import data_lib.config as config
 import datetime as dt
-from lib.data_fetch.get_data import get_test_data, get_g1_distance
-from lib.compute import process
-from lib.geometry.geometric_features import batch_compute_geometry, calculate_adaptive_h
+from data_lib.data_fetch.get_data import get_test_data, get_g1_distance
+from data_lib.compute import process
+from data_lib.geometry.geometric_features import batch_compute_geometry, calculate_adaptive_h
 from step3_simpulate import run_declines_simulation
+from data_lib.data_fetch.get_ops_data import build_partner_ops_vector
+from data_lib.stocks.gatekeeper import run_gates
+from data_lib.feature.ops_features import compute_operational_score
+from data_lib.feature.composite import compute_composite
+import data_lib.stocks.stocks_config as sc
+import json
 
 
 def evaluate_bucket(df, bucket_name):
@@ -92,6 +98,14 @@ def main(simulate=False):
     )
     print(f"Aggregated test decisions: {before} rows -> {len(df_test)} unique mobiles")
 
+    # B_OPERATIONAL
+    df_ops = build_partner_ops_vector(config.TEST_START_DATE, config.TEST_END_DATE)
+
+    # G — GATEKEEPER
+    df_test, df_ops = run_gates(df_test, df_train, df_ops)
+    if not df_ops.empty:
+        df_ops = compute_operational_score(df_ops)
+    
     # 3. Geometric Features (New!)
     print("Computing Geometric 'Pattern-of-History' Features...")
     df_train_geom = df_train.copy()
@@ -285,6 +299,29 @@ def main(simulate=False):
     df["is_deep"] = np.where(
         df["depth_score_point_hex"] > config.DEPTH_SCORE_THRESHOLD, 1, 0
     )
+    
+    # R — COMPOSITE
+    df = compute_composite(df, df_ops)
+
+    # E — EXPOSURE CHECK
+    if not df_ops.empty and "nmbr_active_leads" in df_ops.columns and "expected_daily_slots" in df_ops.columns:
+        exposure_check = df_ops[["partner_id", "nmbr_active_leads", "expected_daily_slots"]].copy()
+        exposure_check["exposure_ratio"] = (
+            exposure_check["nmbr_active_leads"]
+            / exposure_check["expected_daily_slots"].replace(0, np.nan)
+        ).fillna(0)
+        exposure_check["e_concentrated"] = (
+            exposure_check["exposure_ratio"] > sc.EXPOSURE_CONCENTRATION_FACTOR
+        ).astype(int)
+        df = df.merge(
+            exposure_check[["partner_id", "exposure_ratio", "e_concentrated"]],
+            on="partner_id", how="left",
+        )
+        df["e_concentrated"] = df["e_concentrated"].fillna(0).astype(int)
+        downgrade_mask = (df["e_concentrated"] == 1) & (df["confidence_tier"] != "DECLINE")
+        tier_downgrade = {"HIGH": "MOD", "MOD": "LOW", "LOW": "DECLINE"}
+        df.loc[downgrade_mask, "confidence_tier"] = df.loc[downgrade_mask, "confidence_tier"].map(tier_downgrade)
+        df["r_serviceable"] = np.where(df["confidence_tier"].isin(["HIGH", "MOD"]), 1, 0)
 
     # 5. Evaluation / Bucketing
     print("\n--- RESULTS: SEPARATION ANALYSIS ---")
@@ -426,6 +463,11 @@ def main(simulate=False):
         REPORTS_DIR, "install_rate_by_min_dist_bucket_and_geometry_regime.csv"
     )
     dist_regime.to_csv(dist_regime_path, index=False)
+    # R tier reports
+    tier_dist = df.groupby(["min_dist_bucket", "confidence_tier"], dropna=False).agg(
+        total=("mobile", "count"), installs=("installed_decision", "sum")).reset_index()
+    tier_dist["install_rate"] = tier_dist["installs"] / tier_dist["total"]
+    tier_dist.to_csv(os.path.join(REPORTS_DIR, "install_rate_by_min_dist_bucket_and_confidence_tier.csv"), index=False)
 
     if simulate:
         run_declines_simulation(
@@ -440,6 +482,14 @@ def main(simulate=False):
     if len(category_cols) > 0:
         df[category_cols] = df[category_cols].astype(str)
     df.to_hdf(report_path_h5, mode="w", key="df")
+    # H — CONFIG SNAPSHOT
+    config_snapshot = {}
+    for field in sc.H_SNAPSHOT_FIELDS:
+        config_snapshot[field] = getattr(config, field, None)
+    df["config_snapshot"] = json.dumps(config_snapshot)
+
+    if not df_ops.empty:
+        df_ops.to_csv(os.path.join(REPORTS_DIR, "partner_ops_vector.csv"), index=False)
 
     print(f"\nDetailed scores saved to {report_path}")
     print(f"Distance x FS summary saved to {dist_fs_path}")

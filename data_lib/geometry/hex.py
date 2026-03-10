@@ -6,7 +6,7 @@ from shapely.geometry import Polygon
 import os
 from math import radians, cos, sin, sqrt
 from shapely import contains_xy
-from lib import config
+from data_lib import config
 
 
 def create_hex_grid(center_lat, center_lon, radius_km=3.0, hex_size_km=0.25):

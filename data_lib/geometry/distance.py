@@ -1,5 +1,5 @@
 import numpy as np
-from lib.config import EARTH_RADIUS_METER
+from data_lib.config import EARTH_RADIUS_METER
 
 def equiv_radius_m(area_m2: float) -> float:
     return float(np.sqrt(area_m2 / np.pi))

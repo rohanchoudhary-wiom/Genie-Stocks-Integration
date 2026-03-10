@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import ConvexHull
 from scipy.special import expit
-import lib.config as config
+import data_lib.config as config
 
 
 def sigmoid(x):

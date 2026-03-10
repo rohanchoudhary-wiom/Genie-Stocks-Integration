@@ -24,8 +24,8 @@ Final output: confidence tier (HIGH / MOD / LOW / DECLINE).
 import numpy as np
 import pandas as pd
 
-import lib.config as config
-import lib.stocks.stocks_config as sc
+import data_lib.config as config
+import data_lib.stocks.stocks_config as sc
 
 
 def _safe_normalize(series: pd.Series, method: str = "rank") -> pd.Series:

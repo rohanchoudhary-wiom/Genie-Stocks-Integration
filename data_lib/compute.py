@@ -1,11 +1,11 @@
 from tqdm.auto import tqdm
 
 from sklearn.neighbors import BallTree
-from lib.geometry.distance import equiv_radius_m, haversine_m
+from data_lib.geometry.distance import equiv_radius_m, haversine_m
 import numpy as np
 import pandas as pd
 
-from lib.feature.hop_features import compute_hop_features
+from data_lib.feature.hop_features import compute_hop_features
 from pyproj import Transformer
 
 import geopandas as gpd
@@ -15,8 +15,8 @@ from shapely import contains_xy
 from functools import reduce
 import operator
 
-import lib.config as config
-import lib.params as params
+import data_lib.config as config
+import data_lib.params as params
 
 # GLOBAL CONFIG — NEVER CHANGE PER PARTNER
 DEFAULT_LAMBDA = 0.005
