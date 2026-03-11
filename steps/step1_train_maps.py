@@ -25,13 +25,12 @@ def process_single_partner(partner_id, df_train, bad_se, mid_se):
     """
     sub_df = df_train[df_train["partner_id"] == partner_id].copy()
 
-    if len(sub_df) < 50:  # Min samples
+    if len(sub_df) < 5:  # Min samples
         return []
 
     center_lat = np.median(sub_df["latitude"])
     center_lon = np.median(sub_df["longitude"])
 
-    METERS_PER_DEG_LAT = 111320.0
     cos_lat = cos(radians(center_lat))
 
     # Determine best hex size using configured search sizes and radius
@@ -59,7 +58,7 @@ def process_single_partner(partner_id, df_train, bad_se, mid_se):
         bad_se,
         mid_se,
         best_size,
-        METERS_PER_DEG_LAT,
+        config.METERS_PER_DEG_LAT,
         cos_lat,
         partner_id,
     )
@@ -163,15 +162,15 @@ def main():
     )
 
     # Temporary save for find_boundary - use CWD for compatibility with existing script imports
-    temp_poly_path = "poly_stats.h5"
+    temp_poly_path = "artifacts/poly_stats.h5"
     df_hex.to_hdf(temp_poly_path, mode="w", key="df")
-    print("Saved intermediate poly_stats.h5")
+    print("Saved intermediate {temp_poly_path}")
 
     # 4. Find Boundaries
     print("Finding Boundaries...")
 
     # Ensure run_find_boundary can find the file.
-    # run_find_boundary() uses 'poly_stats.h5' from current working directory.
+    # run_find_boundary() uses 'artifacts/poly_stats.h5' from current working directory.
     # Since we just saved it there, it should be fine.
     run_find_boundary()  # Generates partner_cluster_boundaries.h5 in CWD
 
@@ -188,7 +187,7 @@ def main():
     # 5. Competition / Overlaps (Final Map)
     print("Computing Competition Overlaps...")
 
-    # test.get_overlap reads poly_stats.h5 and partner_cluster_boundaries.h5 from CWD
+    # test.get_overlap reads artifacts/poly_stats.h5 and partner_cluster_boundaries.h5 from CWD
     # We need to ensure partner_cluster_boundaries.h5 is in CWD for it.
     if os.path.exists(artifact_bound_path):
         import shutil

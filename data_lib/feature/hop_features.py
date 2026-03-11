@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 from data_lib.geometry.distance import haversine_rad
-from config import EARTH_RADIUS_KILOMETER
+from data_lib.config import EARTH_RADIUS_KILOMETER
 
 
 def compute_hop_features(df_poly: pd.DataFrame, n_hops: int = 3) -> pd.DataFrame:

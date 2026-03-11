@@ -10,7 +10,7 @@ import datetime as dt
 from data_lib.data_fetch.get_data import get_test_data, get_g1_distance
 from data_lib.compute import process
 from data_lib.geometry.geometric_features import batch_compute_geometry, calculate_adaptive_h
-from step3_simpulate import run_declines_simulation
+from steps.step3_simpulate import run_declines_simulation
 from data_lib.data_fetch.get_ops_data import build_partner_ops_vector
 from data_lib.stocks.gatekeeper import run_gates
 from data_lib.feature.ops_features import compute_operational_score
@@ -42,8 +42,10 @@ def main(simulate=False):
 
     # Base directory resolution
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts")
-    REPORTS_DIR = os.path.join(BASE_DIR, "reports")
+    PARENT_DIR = os.path.dirname(BASE_DIR)
+
+    ARTIFACTS_DIR = os.path.join(PARENT_DIR, "artifacts")
+    REPORTS_DIR = os.path.join(PARENT_DIR, "reports")
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
     # 1. Load Artifacts
@@ -100,6 +102,7 @@ def main(simulate=False):
 
     # B_OPERATIONAL
     df_ops = build_partner_ops_vector(config.TEST_START_DATE, config.TEST_END_DATE)
+    print(f"\n\nDF OPS built {df_ops.shape}\n {df_ops.head()}\n\n")
 
     # G — GATEKEEPER
     df_test, df_ops = run_gates(df_test, df_train, df_ops)
@@ -494,18 +497,6 @@ def main(simulate=False):
     print(f"\nDetailed scores saved to {report_path}")
     print(f"Distance x FS summary saved to {dist_fs_path}")
     print(f"Distance x FS x regime summary saved to {dist_regime_path}")
-    # from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-
-    # y_true = df["installed_decision"]
-    # y_pred = df["final_serviceability"]
-
-    # acc = accuracy_score(y_true, y_pred)
-    # cm = confusion_matrix(y_true, y_pred)
-    # report = classification_report(y_true, y_pred)
-
-    # print("Accuracy:", acc)
-    # print("Confusion Matrix:\n", cm)
-    # print("Classification Report:\n", report)
 
 
 if __name__ == "__main__":

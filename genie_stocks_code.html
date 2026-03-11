@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genie ML — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F7F6F3;
+  --card: #FFFFFF;
+  --ink: #18171A;
+  --ink2: #5E5C64;
+  --ink3: #9D9BA3;
+  --rule: #E5E3DE;
+  --rule2: #D0CEC8;
+
+  --g: #7C5CFC;  --g-bg: #F3F0FF;  --g-border: #DDD6FE;
+  --b: #2573EB;  --b-bg: #EBF3FF;  --b-border: #BFDBFE;
+  --r: #E8432A;  --r-bg: #FFF1EE;  --r-border: #FECACA;
+  --e: #D4920A;  --e-bg: #FFFBEB;  --e-border: #FDE68A;
+  --s: #C13060;  --s-bg: #FFF0F5;  --s-border: #FBCFE8;
+  --h: #0D9668;  --h-bg: #ECFDF5;  --h-border: #A7F3D0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 56px 40px 44px;
+  background: white;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 380px; height: 380px;
+  background: conic-gradient(from 180deg, var(--g-bg), var(--b-bg), var(--r-bg), var(--e-bg), var(--s-bg), var(--h-bg), var(--g-bg));
+  border-radius: 50%;
+  opacity: 0.5;
+  filter: blur(60px);
+}
+.hero-inner { max-width: 1280px; margin: 0 auto; position: relative; z-index: 1; }
+.hero h1 {
+  font-size: 2.6rem; font-weight: 800; letter-spacing: -0.04em; line-height: 1.05;
+}
+.hero h1 span { font-weight: 300; color: var(--ink2); }
+.hero-sub {
+  margin-top: 10px; font-size: 1rem; color: var(--ink2); max-width: 620px; line-height: 1.55;
+}
+.pills { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 20px; }
+.pill {
+  padding: 5px 13px; border-radius: 100px; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.02em; border: 1.5px solid; display: inline-flex; align-items: center; gap: 5px;
+}
+.pill i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 36px 40px 80px; }
+
+/* ── SECTIONS ── */
+.sec { margin-bottom: 52px; }
+.sec-tag {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink3); margin-bottom: 8px;
+}
+.sec-title { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 6px; }
+.sec-desc { font-size: 0.88rem; color: var(--ink2); margin-bottom: 22px; max-width: 640px; }
+
+/* ── BIG FLOW SVG ── */
+.flow-frame {
+  background: white; border: 1px solid var(--rule); border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04); padding: 24px; overflow-x: auto;
+}
+
+/* ── STOCK STRIP ── */
+.stock-strip {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
+}
+.scard {
+  border-radius: 12px; padding: 18px 16px; border: 1.5px solid;
+  position: relative; overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.scard:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.07); }
+.scard-letter {
+  font-size: 1.8rem; font-weight: 800; line-height: 1; opacity: 0.12;
+  position: absolute; top: 10px; right: 14px;
+}
+.scard h3 { font-size: 0.82rem; font-weight: 700; margin-bottom: 4px; }
+.scard p { font-size: 0.72rem; line-height: 1.5; opacity: 0.7; }
+.scard-fns {
+  margin-top: 10px; display: flex; flex-direction: column; gap: 3px;
+}
+.scard-fn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; font-weight: 500;
+  padding: 3px 8px; border-radius: 5px; background: rgba(255,255,255,0.6);
+}
+
+/* ── FORMULA CARDS ── */
+.fgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.fcard {
+  background: white; border-radius: 12px; border: 1.5px solid var(--rule);
+  overflow: hidden; transition: box-shadow 0.2s;
+}
+.fcard:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+.fcard-head {
+  padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.fcard-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.fcard-stock {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.fcard-title { font-size: 0.88rem; font-weight: 600; margin-left: auto; text-align: right; }
+.fcard-body { padding: 16px 18px; }
+.fcard-visual {
+  width: 100%; border-radius: 8px; margin-bottom: 12px; overflow: hidden;
+}
+.fcard-visual svg { width: 100%; height: auto; display: block; }
+.fm {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.73rem; line-height: 1.8;
+  background: var(--bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto;
+  white-space: pre; border: 1px solid var(--rule);
+}
+.fm .k { font-weight: 600; }
+.fm .c { color: var(--ink3); font-style: italic; }
+.fm .v { font-weight: 600; }
+
+.fcard-note {
+  margin-top: 10px; font-size: 0.72rem; color: var(--ink2); line-height: 1.5;
+}
+
+/* ── FULL-WIDTH FORMULA ── */
+.fcard-full { grid-column: 1 / -1; }
+
+/* ── CONFIG ── */
+.cfg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.cfg {
+  background: white; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px;
+}
+.cfg h4 { font-size: 0.78rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.cfg h4 i { width: 8px; height: 8px; border-radius: 50%; }
+.cfg-r { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--rule); }
+.cfg-r:last-child { border: none; }
+.cfg-k { font-family: 'IBM Plex Mono', monospace; font-size: 0.67rem; color: var(--ink2); }
+.cfg-v { font-family: 'IBM Plex Mono', monospace; font-size: 0.67rem; font-weight: 600; }
+
+/* ── DATA SOURCES ── */
+.ds-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.ds {
+  background: white; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px;
+}
+.ds h4 {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 600;
+  margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+}
+.ds-badge {
+  font-size: 0.55rem; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ds-sf { background: #E8F0FE; color: #1967D2; }
+.ds-h5 { background: #FFF3E0; color: #E65100; }
+.ds ul { list-style: none; }
+.ds li {
+  font-size: 0.72rem; color: var(--ink2); padding: 2px 0 2px 12px; position: relative;
+}
+.ds li::before { content: '›'; position: absolute; left: 0; color: var(--ink3); font-weight: 700; }
+
+/* ── FILE MAP ── */
+.fm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.fm-card {
+  background: white; border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px;
+}
+.fm-card h4 { font-size: 0.8rem; font-weight: 700; margin-bottom: 8px; }
+.fm-card li {
+  font-size: 0.72rem; color: var(--ink2); padding: 3px 0; list-style: none;
+  padding-left: 12px; position: relative;
+}
+.fm-card li::before { content: '·'; position: absolute; left: 0; font-weight: 700; color: var(--ink3); }
+.fm-card code { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--ink); font-size: 0.68rem; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.sec { animation: rise 0.45s ease both; }
+.sec:nth-child(2) { animation-delay: 0.04s; }
+.sec:nth-child(3) { animation-delay: 0.08s; }
+.sec:nth-child(4) { animation-delay: 0.12s; }
+.sec:nth-child(5) { animation-delay: 0.16s; }
+
+@media (max-width: 900px) {
+  .stock-strip { grid-template-columns: repeat(2, 1fr); }
+  .fgrid, .cfg-grid, .ds-grid { grid-template-columns: 1fr; }
+  .fm-grid { grid-template-columns: 1fr; }
+  .hero { padding: 32px 20px; }
+  main { padding: 24px 20px 60px; }
+  .hero h1 { font-size: 1.8rem; }
+}
+
+/* ── SQL QUERY SECTION ── */
+.query-stock {
+  margin-bottom: 32px;
+}
+.query-stock-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  border-radius: 10px 10px 0 0;
+  border: 1.5px solid;
+  border-bottom: none;
+}
+.query-stock-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Outfit'; font-size: 1rem; font-weight: 800; color: white;
+  flex-shrink: 0;
+}
+.query-stock-header h3 {
+  font-size: 0.92rem; font-weight: 700;
+}
+.query-stock-header h3 span {
+  display: block; font-size: 0.72rem; font-weight: 400; color: var(--ink2); margin-top: 1px;
+}
+.query-stock-body {
+  border: 1.5px solid;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: white;
+}
+
+.query-card {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--rule);
+}
+.query-card:last-child { border-bottom: none; }
+
+.query-card-top {
+  display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px;
+}
+.query-fn-badge {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 600;
+  padding: 3px 10px; border-radius: 5px; white-space: nowrap; flex-shrink: 0;
+}
+.query-purpose {
+  font-size: 0.8rem; color: var(--ink2); line-height: 1.5;
+}
+.query-io {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+}
+.query-tag {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; font-weight: 500;
+  padding: 2px 7px; border-radius: 4px; border: 1px solid;
+}
+.query-tag-table { background: #E8F0FE; color: #1967D2; border-color: #BFDBFE; }
+.query-tag-out { background: var(--h-bg); color: var(--h); border-color: var(--h-border); }
+.query-tag-feeds { background: var(--e-bg); color: var(--e); border-color: var(--e-border); }
+
+.sql-block {
+  background: #1E1E2E;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.sql-block-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: #2A2A3E;
+  border-bottom: 1px solid #3A3A50;
+}
+.sql-block-label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 600;
+  color: #8888AA; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.sql-block-table {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; font-weight: 500;
+  color: #6C99BB; padding: 2px 8px; background: rgba(108,153,187,0.1);
+  border-radius: 4px;
+}
+.sql-block pre {
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  line-height: 1.65;
+  color: #CDD6F4;
+  white-space: pre;
+  tab-size: 2;
+}
+.sql-block .kw { color: #CBA6F7; font-weight: 600; }
+.sql-block .fn { color: #89B4FA; }
+.sql-block .str { color: #A6E3A1; }
+.sql-block .cm { color: #585B70; font-style: italic; }
+.sql-block .num { color: #FAB387; }
+.sql-block .op { color: #F38BA8; }
+.sql-block .col { color: #F5E0DC; }
+.sql-block .tbl { color: #F9E2AF; font-weight: 500; }
+.sql-block .alias { color: #94E2D5; }
+
+.query-chain {
+  display: flex; align-items: center; gap: 6px; margin: 8px 0 4px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink3);
+}
+.query-chain-arrow {
+  color: var(--ink3); font-size: 0.8rem;
+}
+.query-chain code {
+  font-weight: 600; color: var(--ink);
+}
+
+.query-note {
+  font-size: 0.72rem; color: var(--ink3); line-height: 1.5;
+  margin-top: 8px; padding: 8px 12px;
+  background: var(--bg); border-radius: 6px; border: 1px solid var(--rule);
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════ HERO ════════════ -->
+<div class="hero">
+  <div class="hero-inner">
+    <h1>Genie ML <span>Architecture</span></h1>
+    <p class="hero-sub">Real-time lead-to-partner matching. Geospatial scoring via Gaussian KDE, hex grids, and a six-stock promise governance layer (GBRESH).</p>
+    <div class="pills">
+      <span class="pill" style="border-color:var(--g);color:var(--g)"><i style="background:var(--g)"></i>G · Gatekeeper</span>
+      <span class="pill" style="border-color:var(--b);color:var(--b)"><i style="background:var(--b)"></i>B · Spatial + Ops</span>
+      <span class="pill" style="border-color:var(--r);color:var(--r)"><i style="background:var(--r)"></i>R · Promise Governor</span>
+      <span class="pill" style="border-color:var(--e);color:var(--e)"><i style="background:var(--e)"></i>E · Exposure</span>
+      <span class="pill" style="border-color:var(--s);color:var(--s)"><i style="background:var(--s)"></i>S · Shock Ledger</span>
+      <span class="pill" style="border-color:var(--h);color:var(--h)"><i style="background:var(--h)"></i>H · Calibration</span>
+    </div>
+  </div>
+</div>
+
+<main>
+
+<!-- ════════════ §1 — END-TO-END FLOW ════════════ -->
+<div class="sec">
+  <div class="sec-tag">01 · System Flow</div>
+  <div class="sec-title">End-to-End Data Flow</div>
+  <div class="sec-desc">Data enters from Snowflake, passes through training to build maps, then scoring applies all six stocks sequentially.</div>
+
+  <div class="flow-frame">
+    <svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:1000px;">
+      <defs>
+        <marker id="ag" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#9D9BA3"/></marker>
+        <marker id="ab" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#2573EB"/></marker>
+        <marker id="ar" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#E8432A"/></marker>
+        <marker id="ap" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7C5CFC"/></marker>
+        <marker id="as" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#C13060"/></marker>
+        <marker id="ae" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#D4920A"/></marker>
+        <marker id="ah" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#0D9668"/></marker>
+        <filter id="ds"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/></filter>
+      </defs>
+
+      <!-- ── LAYER: DATA SOURCES (ROW 1) ── -->
+      <text x="28" y="30" font-family="IBM Plex Mono" font-size="9" fill="#9D9BA3" font-weight="600" letter-spacing="1.5">DATA SOURCES</text>
+
+      <rect x="20" y="42" width="165" height="48" rx="8" fill="#E8F0FE" stroke="#BFDBFE" filter="url(#ds)"/>
+      <text x="102" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#1967D2">t_node_decisions</text>
+      <text x="102" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">Train + Test decisions</text>
+
+      <rect x="200" y="42" width="165" height="48" rx="8" fill="#E8F0FE" stroke="#BFDBFE" filter="url(#ds)"/>
+      <text x="282" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#1967D2">task + booking logs</text>
+      <text x="282" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">Lead lifecycle, slots</text>
+
+      <rect x="380" y="42" width="145" height="48" rx="8" fill="#E8F0FE" stroke="#BFDBFE" filter="url(#ds)"/>
+      <text x="452" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#1967D2">ticket_audit</text>
+      <text x="452" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">Service tickets</text>
+
+      <rect x="540" y="42" width="145" height="48" rx="8" fill="#E8F0FE" stroke="#BFDBFE" filter="url(#ds)"/>
+      <text x="612" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#1967D2">outage_incidents</text>
+      <text x="612" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">Router outages</text>
+
+      <rect x="700" y="42" width="145" height="48" rx="8" fill="#E8F0FE" stroke="#BFDBFE" filter="url(#ds)"/>
+      <text x="772" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#1967D2">serviceability_logs</text>
+      <text x="772" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">G1 distance</text>
+
+      <rect x="860" y="42" width="140" height="48" rx="8" fill="#FFF3E0" stroke="#FDE68A" filter="url(#ds)"/>
+      <text x="930" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#E65100">HDF5 Artifacts</text>
+      <text x="930" y="78" text-anchor="middle" font-family="Outfit" font-size="8" fill="#5E5C64">Hex polys, boundaries</text>
+
+      <!-- feed arrows -->
+      <line x1="102" y1="90" x2="102" y2="138" stroke="#BFDBFE" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+      <line x1="282" y1="90" x2="282" y2="138" stroke="#BFDBFE" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+      <line x1="452" y1="90" x2="452" y2="290" stroke="#BFDBFE" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+      <line x1="612" y1="90" x2="612" y2="290" stroke="#BFDBFE" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+      <line x1="930" y1="90" x2="930" y2="138" stroke="#FDE68A" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+
+      <!-- ── LAYER: TRAINING (ROW 2 — collapsed bar) ── -->
+      <rect x="20" y="140" width="1160" height="42" rx="8" fill="white" stroke="var(--rule2)" filter="url(#ds)"/>
+      <text x="40" y="165" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="var(--ink2)">STEP 1 · TRAIN</text>
+      <text x="160" y="165" font-family="Outfit" font-size="9" fill="var(--ink3)">IDW field weights → Hex grid search → DBSCAN boundary clustering → STRtree overlap detection → Artifacts saved</text>
+
+      <!-- ── LAYER: SCORING STOCKS (ROW 3) ── -->
+      <text x="28" y="210" font-family="IBM Plex Mono" font-size="9" fill="#9D9BA3" font-weight="600" letter-spacing="1.5">STEP 2 · SCORE — STOCK SEQUENCE</text>
+
+      <!-- G -->
+      <rect x="20" y="225" width="160" height="120" rx="10" fill="var(--g-bg)" stroke="var(--g)" stroke-width="1.8"/>
+      <text x="100" y="245" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="var(--g)">G</text>
+      <text x="100" y="260" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="var(--g)">GATEKEEPER</text>
+      <text x="32" y="280" font-family="Outfit" font-size="7.5" fill="var(--ink2)">density_router()</text>
+      <text x="32" y="293" font-family="Outfit" font-size="7.5" fill="var(--ink2)">partner_block_gate()</text>
+      <text x="32" y="306" font-family="Outfit" font-size="7.5" fill="var(--ink2)">capacity_gate()</text>
+      <text x="32" y="319" font-family="Outfit" font-size="7.5" fill="var(--ink2)">shock_gate()</text>
+      <text x="32" y="335" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--g)">→ gate_blocked</text>
+
+      <!-- arrow G → B_ops -->
+      <line x1="180" y1="285" x2="210" y2="285" stroke="var(--g)" stroke-width="1.5" marker-end="url(#ap)"/>
+
+      <!-- B_ops -->
+      <rect x="215" y="225" width="180" height="120" rx="10" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1.8"/>
+      <text x="305" y="245" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="#5C9AFF">B<tspan font-size="8" dy="2">ops</tspan></text>
+      <text x="305" y="260" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="#5C9AFF">OPERATIONAL</text>
+      <text x="227" y="280" font-family="Outfit" font-size="7.5" fill="var(--ink2)">lead_capacity()</text>
+      <text x="227" y="293" font-family="Outfit" font-size="7.5" fill="var(--ink2)">ticket_capacity()</text>
+      <text x="227" y="306" font-family="Outfit" font-size="7.5" fill="var(--ink2)">reliability()</text>
+      <text x="227" y="319" font-family="Outfit" font-size="7.5" fill="var(--ink2)">partner_performance()</text>
+      <text x="227" y="335" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="#5C9AFF">→ operational_score</text>
+
+      <!-- arrow B_ops → R -->
+      <path d="M 305 345 L 305 380 L 620 380 L 620 415" stroke="#5C9AFF" stroke-width="1.5" fill="none" marker-end="url(#ab)"/>
+
+      <!-- S -->
+      <rect x="410" y="290" width="165" height="90" rx="10" fill="var(--s-bg)" stroke="var(--s)" stroke-width="1.8"/>
+      <text x="492" y="315" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="var(--s)">S</text>
+      <text x="492" y="330" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="var(--s)">SHOCK LEDGER</text>
+      <text x="422" y="350" font-family="Outfit" font-size="7.5" fill="var(--ink2)">get_active_outages()</text>
+      <text x="422" y="363" font-family="Outfit" font-size="7.5" fill="var(--ink2)">compute_shock_flags()</text>
+      <text x="422" y="376" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--s)">→ has_shock per partner</text>
+
+      <!-- S → G -->
+      <path d="M 410 320 L 185 320 L 185 335" stroke="var(--s)" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#as)"/>
+      <text x="290" y="314" font-family="IBM Plex Mono" font-size="6.5" fill="var(--s)">shock_gate feed</text>
+
+      <!-- S → B_ops -->
+      <path d="M 410 350 L 395 350 L 395 328" stroke="var(--s)" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#as)"/>
+      <text x="398" y="342" font-family="IBM Plex Mono" font-size="6.5" fill="var(--s)">infra</text>
+
+      <!-- B_spatial -->
+      <rect x="600" y="225" width="240" height="145" rx="10" fill="var(--b-bg)" stroke="var(--b)" stroke-width="1.8"/>
+      <text x="720" y="245" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="var(--b)">B<tspan font-size="8" dy="2">spatial</tspan></text>
+      <text x="720" y="260" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="var(--b)">SPATIAL SIGNAL</text>
+      <text x="612" y="280" font-family="Outfit" font-size="7.5" fill="var(--ink2)">get_parent_hexagon()</text>
+      <text x="612" y="293" font-family="Outfit" font-size="7.5" fill="var(--ink2)">add_boundary_details()</text>
+      <text x="612" y="306" font-family="Outfit" font-size="7.5" fill="var(--ink2)">gaussian_field() × 2</text>
+      <text x="612" y="319" font-family="Outfit" font-size="7.5" fill="var(--ink2)">hop_features(3-hop)</text>
+      <text x="612" y="332" font-family="Outfit" font-size="7.5" fill="var(--ink2)">contested_metrics()</text>
+      <text x="612" y="345" font-family="Outfit" font-size="7.5" fill="var(--ink2)">batch_geometry()</text>
+      <text x="612" y="360" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--b)">→ spatial_shrunk (4 components)</text>
+
+      <!-- B_spatial → R -->
+      <path d="M 720 370 L 720 415" stroke="var(--b)" stroke-width="1.8" fill="none" marker-end="url(#ab)"/>
+
+      <!-- Booking classifier (middle bridge) -->
+      <rect x="860" y="260" width="160" height="65" rx="8" fill="white" stroke="var(--rule2)" filter="url(#ds)"/>
+      <text x="940" y="283" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" font-weight="600" fill="var(--ink)">BOOKING CLASSIFIER</text>
+      <text x="940" y="298" text-anchor="middle" font-family="Outfit" font-size="7.5" fill="var(--ink2)">6-tier: A→F scoring</text>
+      <text x="940" y="313" text-anchor="middle" font-family="Outfit" font-size="7.5" fill="var(--ink2)">gravity + comp + color</text>
+      <path d="M 860 295 L 840 295" stroke="var(--rule2)" stroke-width="1" fill="none" marker-end="url(#ag)"/>
+
+      <!-- R — PROMISE GOVERNOR -->
+      <rect x="520" y="418" width="400" height="80" rx="10" fill="var(--r-bg)" stroke="var(--r)" stroke-width="2"/>
+      <text x="720" y="442" text-anchor="middle" font-family="Outfit" font-size="14" font-weight="800" fill="var(--r)">R · PROMISE GOVERNOR</text>
+      <text x="536" y="462" font-family="IBM Plex Mono" font-size="8" fill="var(--ink2)">composite = spatial_shrunk × operational_score</text>
+      <text x="536" y="478" font-family="IBM Plex Mono" font-size="8" fill="var(--ink2)">tiers: HIGH(≥.65) | MOD(≥.44) | LOW(≥.30) | DECLINE</text>
+      <text x="536" y="492" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--r)">gate_blocked → force DECLINE · r_serviceable = HIGH∪MOD</text>
+
+      <!-- G → R (gate_blocked) -->
+      <path d="M 100 345 L 100 490 L 520 490" stroke="var(--g)" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#ap)"/>
+      <text x="110" y="440" font-family="IBM Plex Mono" font-size="7" fill="var(--g)">gate_blocked</text>
+
+      <!-- E — EXPOSURE -->
+      <rect x="940" y="418" width="170" height="80" rx="10" fill="var(--e-bg)" stroke="var(--e)" stroke-width="1.8"/>
+      <text x="1025" y="442" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="var(--e)">E</text>
+      <text x="1025" y="457" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="var(--e)">EXPOSURE</text>
+      <text x="952" y="476" font-family="Outfit" font-size="7.5" fill="var(--ink2)">pending / daily_slots > 2×</text>
+      <text x="952" y="490" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--e)">→ tier downgrade</text>
+
+      <!-- R → E -->
+      <line x1="920" y1="458" x2="940" y2="458" stroke="var(--r)" stroke-width="1.5" marker-end="url(#ae)"/>
+
+      <!-- H — CALIBRATION -->
+      <rect x="1030" y="530" width="150" height="60" rx="10" fill="var(--h-bg)" stroke="var(--h)" stroke-width="1.8"/>
+      <text x="1105" y="554" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="800" fill="var(--h)">H</text>
+      <text x="1105" y="569" text-anchor="middle" font-family="Outfit" font-size="8.5" font-weight="600" fill="var(--h)">CALIBRATION</text>
+      <text x="1042" y="584" font-family="Outfit" font-size="7.5" fill="var(--ink2)">config → JSON snapshot</text>
+
+      <!-- OUTPUT -->
+      <rect x="420" y="530" width="400" height="55" rx="10" fill="white" stroke="var(--ink)" stroke-width="2" filter="url(#ds)"/>
+      <text x="620" y="554" text-anchor="middle" font-family="Outfit" font-size="12" font-weight="700" fill="var(--ink)">OUTPUT</text>
+      <text x="620" y="572" text-anchor="middle" font-family="IBM Plex Mono" font-size="8.5" fill="var(--ink2)">test_scores.csv — per lead: all features + tier + config snapshot</text>
+
+      <!-- R → Output -->
+      <line x1="620" y1="498" x2="620" y2="530" stroke="var(--r)" stroke-width="2" marker-end="url(#ar)"/>
+      <!-- E → Output -->
+      <path d="M 1025 498 L 1025 510 L 820 510 L 820 530" stroke="var(--e)" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#ae)"/>
+      <!-- H → Output -->
+      <path d="M 1030 560 L 820 560" stroke="var(--h)" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#ah)"/>
+
+      <!-- G1 logs line -->
+      <path d="M 772 90 L 772 120 L 1140 120 L 1140 555 L 820 555" stroke="#9D9BA3" stroke-width="1" fill="none" stroke-dasharray="3,3" marker-end="url(#ag)"/>
+      <text x="1148" y="340" font-family="IBM Plex Mono" font-size="7" fill="#9D9BA3" transform="rotate(90,1148,340)">G1 distance merge</text>
+
+      <!-- STEP 3 -->
+      <rect x="20" y="620" width="400" height="42" rx="8" fill="white" stroke="var(--rule2)" filter="url(#ds)"/>
+      <text x="40" y="645" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="var(--ink2)">STEP 3 · SIMULATE</text>
+      <text x="180" y="645" font-family="Outfit" font-size="9" fill="var(--ink3)">G1 declines → full scoring pipeline → potential × 0.8</text>
+    </svg>
+  </div>
+</div>
+
+
+<!-- ════════════ §2 — SIX STOCKS ════════════ -->
+<div class="sec">
+  <div class="sec-tag">02 · Stocks at a Glance</div>
+  <div class="sec-title">GBRESH Overview</div>
+
+  <div class="stock-strip">
+    <div class="scard" style="background:var(--g-bg);border-color:var(--g);">
+      <div class="scard-letter" style="color:var(--g);">G</div>
+      <h3 style="color:var(--g);">Gatekeeper</h3>
+      <p>Pre-filter. Removes leads and partners before scoring.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">density_router → regime 1/2</span>
+        <span class="scard-fn">partner_block → decline rate</span>
+        <span class="scard-fn">capacity → pending overload</span>
+        <span class="scard-fn">shock → S ledger feed</span>
+      </div>
+    </div>
+    <div class="scard" style="background:var(--b-bg);border-color:var(--b);">
+      <div class="scard-letter" style="color:var(--b);">B</div>
+      <h3 style="color:var(--b);">Spatial Signal</h3>
+      <p>Gaussian fields, hex grids, boundaries, hop features.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">hex assignment + shrinkage</span>
+        <span class="scard-fn">Gaussian KDE field</span>
+        <span class="scard-fn">contested zone metrics</span>
+        <span class="scard-fn">3-hop SE aggregation</span>
+      </div>
+    </div>
+    <div class="scard" style="background:var(--b-bg);border-color:#5C9AFF;">
+      <div class="scard-letter" style="color:#5C9AFF;">B<sub>o</sub></div>
+      <h3 style="color:#5C9AFF;">Operational Signal</h3>
+      <p>Partner ops vector: capacity, tickets, reliability.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">lead lifecycle capacity</span>
+        <span class="scard-fn">ticket TAT + resolution</span>
+        <span class="scard-fn">slot tardiness scoring</span>
+        <span class="scard-fn">→ operational_score [0,1]</span>
+      </div>
+    </div>
+    <div class="scard" style="background:var(--r-bg);border-color:var(--r);">
+      <div class="scard-letter" style="color:var(--r);">R</div>
+      <h3 style="color:var(--r);">Promise Governor</h3>
+      <p>Fuses spatial × operational into composite tiers.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">4 normalised spatial components</span>
+        <span class="scard-fn">composite = spatial × ops</span>
+        <span class="scard-fn">→ HIGH / MOD / LOW / DECLINE</span>
+      </div>
+    </div>
+    <div class="scard" style="background:var(--s-bg);border-color:var(--s);">
+      <div class="scard-letter" style="color:var(--s);">S</div>
+      <h3 style="color:var(--s);">Shock Ledger</h3>
+      <p>Transient events that block partners.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">outage severity ≥ 3</span>
+        <span class="scard-fn">decline spike</span>
+        <span class="scard-fn">capacity overload</span>
+      </div>
+    </div>
+    <div class="scard" style="background:var(--e-bg);border-color:var(--e);">
+      <div class="scard-letter" style="color:var(--e);">E</div>
+      <h3 style="color:var(--e);">Exposure</h3>
+      <p>Post-R concentration check.</p>
+      <div class="scard-fns">
+        <span class="scard-fn">pending / slots > 2×</span>
+        <span class="scard-fn">→ tier downgrade</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════ §3 — FORMULAS × STOCKS ════════════ -->
+<div class="sec">
+  <div class="sec-tag">03 · Mathematics</div>
+  <div class="sec-title">Formulas by Stock</div>
+  <div class="sec-desc">Each formula colour-coded to the stock that owns it.</div>
+
+  <div class="fgrid">
+
+    <!-- ── B_spatial: Gaussian KDE ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--b)"></div>
+        <div class="fcard-stock" style="color:var(--b)">B · SPATIAL</div>
+        <div class="fcard-title">Gaussian KDE Field</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 480 130" xmlns="http://www.w3.org/2000/svg">
+            <rect width="480" height="130" fill="var(--b-bg)" rx="8"/>
+            <!-- Target point -->
+            <circle cx="240" cy="65" r="8" fill="var(--b)" opacity="0.9"/>
+            <text x="240" y="96" text-anchor="middle" font-family="Outfit" font-size="9" font-weight="600" fill="var(--b)">target</text>
+            <!-- Source points with gaussian halos -->
+            <circle cx="140" cy="50" r="30" fill="var(--h)" opacity="0.08"/><circle cx="140" cy="50" r="18" fill="var(--h)" opacity="0.12"/><circle cx="140" cy="50" r="5" fill="var(--h)" opacity="0.8"/>
+            <text x="140" y="96" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">install +1.0</text>
+            <circle cx="320" cy="45" r="26" fill="var(--s)" opacity="0.08"/><circle cx="320" cy="45" r="15" fill="var(--s)" opacity="0.12"/><circle cx="320" cy="45" r="5" fill="var(--s)" opacity="0.8"/>
+            <text x="320" y="96" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">decline −1.5</text>
+            <circle cx="190" cy="35" r="22" fill="var(--h)" opacity="0.08"/><circle cx="190" cy="35" r="12" fill="var(--h)" opacity="0.12"/><circle cx="190" cy="35" r="4" fill="var(--h)" opacity="0.7"/>
+            <circle cx="380" cy="70" r="20" fill="var(--ink3)" opacity="0.06"/><circle cx="380" cy="70" r="10" fill="var(--ink3)" opacity="0.1"/><circle cx="380" cy="70" r="4" fill="var(--ink3)" opacity="0.5"/>
+            <text x="380" y="96" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">ambiguous (IDW)</text>
+            <circle cx="80" cy="65" r="24" fill="var(--h)" opacity="0.08"/><circle cx="80" cy="65" r="13" fill="var(--h)" opacity="0.12"/><circle cx="80" cy="65" r="4" fill="var(--h)" opacity="0.7"/>
+            <!-- Dashed radius -->
+            <circle cx="240" cy="65" r="55" fill="none" stroke="var(--b)" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+            <text x="300" y="28" font-family="IBM Plex Mono" font-size="7" fill="var(--b)" opacity="0.7">max_radius</text>
+            <!-- time arrow -->
+            <line x1="30" y1="120" x2="460" y2="120" stroke="var(--ink3)" stroke-width="0.5" opacity="0.3"/>
+            <text x="245" y="118" text-anchor="middle" font-family="IBM Plex Mono" font-size="6" fill="var(--ink3)">time decay: exp(−λ × days)</text>
+          </svg>
+        </div>
+        <div class="fm"><span class="k" style="color:var(--b)">kernel(s)</span>  = exp( −0.5 × d²/h² )
+<span class="k" style="color:var(--b)">time(s)</span>    = exp( −λ × age_days )       <span class="c">λ=0.005</span>
+<span class="k" style="color:var(--b)">field(t)</span>   = Σ(kernel × w × time) / Σ(kernel)</div>
+        <div class="fcard-note">Called twice: per-hex field (predicted_field_hex) and all-hex combined field. h = adaptive bandwidth from 3-NN (20–150m).</div>
+      </div>
+    </div>
+
+    <!-- ── B_spatial: Shrinkage ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--b)"></div>
+        <div class="fcard-stock" style="color:var(--b)">B · SPATIAL</div>
+        <div class="fcard-title">Asymmetric SE Shrinkage</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 480 120" xmlns="http://www.w3.org/2000/svg">
+            <rect width="480" height="120" fill="var(--b-bg)" rx="8"/>
+            <!-- Axis -->
+            <line x1="40" y1="60" x2="440" y2="60" stroke="var(--ink3)" stroke-width="0.6"/>
+            <line x1="240" y1="20" x2="240" y2="100" stroke="var(--ink3)" stroke-width="0.6"/>
+            <text x="240" y="112" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">raw SE = 0</text>
+            <text x="440" y="55" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">+SE</text>
+            <text x="44" y="55" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">−SE</text>
+            <!-- Raw line -->
+            <line x1="60" y1="96" x2="420" y2="24" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+            <text x="420" y="18" font-family="IBM Plex Mono" font-size="6.5" fill="var(--ink3)">raw</text>
+            <!-- Shrunk positive: dampened toward zero -->
+            <line x1="240" y1="60" x2="400" y2="34" stroke="var(--h)" stroke-width="2"/>
+            <text x="370" y="28" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--h)">×ratio (dampen)</text>
+            <!-- Shrunk negative: amplified away from zero -->
+            <line x1="240" y1="60" x2="80" y2="100" stroke="var(--s)" stroke-width="2"/>
+            <text x="90" y="106" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--s)">÷ratio (amplify)</text>
+            <!-- Ratio formula -->
+            <rect x="160" y="5" width="160" height="18" rx="4" fill="white" opacity="0.8"/>
+            <text x="240" y="17" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--b)">ratio = max(0.45, n/(n+4))</text>
+          </svg>
+        </div>
+        <div class="fm"><span class="k" style="color:var(--b)">ratio</span>    = max(0.45, total / (total + 4))
+<span class="k" style="color:var(--h)">se ≥ 0</span>:  se_shrunk = se × ratio  <span class="c">dampen positive</span>
+<span class="k" style="color:var(--s)">se < 0</span>:  se_shrunk = se / ratio  <span class="c">amplify negative</span></div>
+        <div class="fcard-note">Applied per hex in get_parent_hexagon() before evidence-weighted consensus across all covering hexes.</div>
+      </div>
+    </div>
+
+    <!-- ── B_spatial: Hop Features ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--b)"></div>
+        <div class="fcard-stock" style="color:var(--b)">B · SPATIAL</div>
+        <div class="fcard-title">3-Hop Neighbor SE Aggregation</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 480 150" xmlns="http://www.w3.org/2000/svg">
+            <rect width="480" height="150" fill="var(--b-bg)" rx="8"/>
+            <!-- Center hex -->
+            <polygon points="240,50 254,58 254,74 240,82 226,74 226,58" fill="var(--b)" opacity="0.8" stroke="white" stroke-width="1"/>
+            <text x="240" y="70" text-anchor="middle" font-family="Outfit" font-size="7" font-weight="700" fill="white">self</text>
+            <!-- Hop 1 ring -->
+            <circle cx="240" cy="66" r="28" fill="none" stroke="var(--h)" stroke-width="1.5" stroke-dasharray="3,2"/>
+            <text x="275" y="42" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--h)">hop 1</text>
+            <!-- Hop 1 hexes -->
+            <polygon points="268,42 278,48 278,58 268,64 258,58 258,48" fill="var(--h)" opacity="0.3" stroke="var(--h)" stroke-width="0.5"/>
+            <polygon points="268,72 278,78 278,88 268,94 258,88 258,78" fill="var(--h)" opacity="0.3" stroke="var(--h)" stroke-width="0.5"/>
+            <polygon points="212,42 222,48 222,58 212,64 202,58 202,48" fill="var(--h)" opacity="0.3" stroke="var(--h)" stroke-width="0.5"/>
+            <polygon points="212,72 222,78 222,88 212,94 202,88 202,78" fill="var(--h)" opacity="0.3" stroke="var(--h)" stroke-width="0.5"/>
+            <!-- Hop 2 ring -->
+            <circle cx="240" cy="66" r="52" fill="none" stroke="var(--e)" stroke-width="1.2" stroke-dasharray="3,2"/>
+            <text x="300" y="24" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--e)">hop 2</text>
+            <!-- Hop 3 ring -->
+            <circle cx="240" cy="66" r="72" fill="none" stroke="var(--s)" stroke-width="1" stroke-dasharray="3,2"/>
+            <text x="322" y="10" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--s)">hop 3</text>
+            <!-- Labels -->
+            <text x="240" y="130" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="var(--ink2)">weight = 1 / (hop × dist_km)</text>
+            <text x="240" y="145" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">step_km = best_size × 2</text>
+          </svg>
+        </div>
+        <div class="fm"><span class="k" style="color:var(--b)">hop_k_wmean</span> = Σ(w × SE) / Σ(w)   <span class="c">w = 1/(hop×dist)</span>
+<span class="k" style="color:var(--h)">gradient</span>   = hop1 − hop3     <span class="c">local pocket signal</span>
+<span class="k" style="color:var(--e)">confirmed</span>  = hop1 × hop3     <span class="c">both rings good</span>
+<span class="k" style="color:var(--s)">isolation</span>  = count1 / count3 <span class="c">fringe vs core</span></div>
+      </div>
+    </div>
+
+    <!-- ── G: Density Gate ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--g)"></div>
+        <div class="fcard-stock" style="color:var(--g)">G · GATEKEEPER</div>
+        <div class="fcard-title">Density Router + Partner Gates</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 480 110" xmlns="http://www.w3.org/2000/svg">
+            <rect width="480" height="110" fill="var(--g-bg)" rx="8"/>
+            <!-- Lead point -->
+            <circle cx="100" cy="55" r="6" fill="var(--g)"/>
+            <text x="100" y="80" text-anchor="middle" font-family="Outfit" font-size="8" font-weight="600" fill="var(--g)">lead</text>
+            <!-- 100m radius -->
+            <circle cx="100" cy="55" r="35" fill="none" stroke="var(--g)" stroke-width="1" stroke-dasharray="3,2"/>
+            <text x="100" y="22" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--g)">100m</text>
+            <!-- Scattered points -->
+            <circle cx="82" cy="42" r="2.5" fill="var(--ink3)"/><circle cx="115" cy="38" r="2.5" fill="var(--ink3)"/>
+            <circle cx="90" cy="65" r="2.5" fill="var(--ink3)"/><circle cx="120" cy="55" r="2.5" fill="var(--ink3)"/>
+            <circle cx="75" cy="55" r="2.5" fill="var(--ink3)"/><circle cx="108" cy="70" r="2.5" fill="var(--ink3)"/>
+            <!-- Decision arrow -->
+            <line x1="145" y1="55" x2="195" y2="55" stroke="var(--g)" stroke-width="1.2" marker-end="url(#ap)"/>
+            <!-- Regime boxes -->
+            <rect x="200" y="25" width="110" height="28" rx="5" fill="var(--h)" opacity="0.15" stroke="var(--h)" stroke-width="1"/>
+            <text x="255" y="43" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" font-weight="600" fill="var(--h)">≥30 → Regime 1</text>
+            <rect x="200" y="60" width="110" height="28" rx="5" fill="var(--s)" opacity="0.15" stroke="var(--s)" stroke-width="1"/>
+            <text x="255" y="78" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" font-weight="600" fill="var(--s)"><30 → Regime 2</text>
+            <!-- Partner gates -->
+            <rect x="340" y="15" width="130" height="85" rx="6" fill="white" stroke="var(--g)" stroke-width="1"/>
+            <text x="405" y="32" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--g)">PARTNER GATES</text>
+            <text x="350" y="48" font-family="Outfit" font-size="7" fill="var(--ink2)">decline_rate ≥ 0.85</text>
+            <text x="350" y="62" font-family="Outfit" font-size="7" fill="var(--ink2)">pending ≥ 3× slots</text>
+            <text x="350" y="76" font-family="Outfit" font-size="7" fill="var(--ink2)">has_shock from S</text>
+            <text x="350" y="92" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--g)">ANY → gate_blocked=1</text>
+          </svg>
+        </div>
+        <div class="fm"><span class="k" style="color:var(--g)">density</span> = BallTree.count(lead, r=100m, train)
+<span class="k" style="color:var(--g)">blocked</span> = decline_rate≥0.85 OR pending≥3×slots OR shock</div>
+      </div>
+    </div>
+
+    <!-- ── R: COMPOSITE — FULL WIDTH ── -->
+    <div class="fcard fcard-full">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--r)"></div>
+        <div class="fcard-stock" style="color:var(--r)">R · PROMISE GOVERNOR</div>
+        <div class="fcard-title">Composite Score & Tier Assignment</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 960 180" xmlns="http://www.w3.org/2000/svg">
+            <rect width="960" height="180" fill="var(--r-bg)" rx="8"/>
+            <!-- 4 spatial boxes -->
+            <rect x="20" y="20" width="130" height="55" rx="6" fill="white" stroke="var(--b)" stroke-width="1.2"/>
+            <text x="85" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--b)">norm_field</text>
+            <text x="85" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">rank(predicted_field)</text>
+            <text x="85" y="66" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="700" fill="var(--b)">w = 0.30</text>
+
+            <rect x="165" y="20" width="130" height="55" rx="6" fill="white" stroke="var(--b)" stroke-width="1.2"/>
+            <text x="230" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--b)">norm_contested</text>
+            <text x="230" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">rank(contested_field)</text>
+            <text x="230" y="66" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="700" fill="var(--b)">w = 0.15</text>
+
+            <rect x="310" y="20" width="145" height="55" rx="6" fill="white" stroke="var(--b)" stroke-width="1.2"/>
+            <text x="382" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--b)">norm_evidence</text>
+            <text x="382" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">rank(log(total)×sign(se))</text>
+            <text x="382" y="66" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="700" fill="var(--b)">w = 0.20</text>
+
+            <rect x="470" y="20" width="130" height="55" rx="6" fill="white" stroke="var(--b)" stroke-width="1.2"/>
+            <text x="535" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--b)">norm_color</text>
+            <text x="535" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">minmax(color_numeric)</text>
+            <text x="535" y="66" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="700" fill="var(--b)">w = 0.20</text>
+
+            <!-- Arrows down to spatial_shrunk -->
+            <line x1="85" y1="75" x2="85" y2="95" stroke="var(--b)" stroke-width="1" marker-end="url(#ab)"/>
+            <line x1="230" y1="75" x2="230" y2="95" stroke="var(--b)" stroke-width="1" marker-end="url(#ab)"/>
+            <line x1="382" y1="75" x2="382" y2="95" stroke="var(--b)" stroke-width="1" marker-end="url(#ab)"/>
+            <line x1="535" y1="75" x2="535" y2="95" stroke="var(--b)" stroke-width="1" marker-end="url(#ab)"/>
+
+            <!-- spatial_shrunk box -->
+            <rect x="160" y="96" width="300" height="28" rx="6" fill="var(--b)" opacity="0.12" stroke="var(--b)" stroke-width="1.2"/>
+            <text x="310" y="114" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="var(--b)">spatial_shrunk = Σ(w×norm) / Σ(w)</text>
+
+            <!-- Operational box -->
+            <rect x="620" y="20" width="165" height="55" rx="6" fill="white" stroke="#5C9AFF" stroke-width="1.2"/>
+            <text x="702" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="#5C9AFF">operational_score</text>
+            <text x="702" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">mean(cap, rel, infra)</text>
+            <text x="702" y="66" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" font-weight="700" fill="#5C9AFF">floor = 0.20</text>
+
+            <!-- Arrow ops down -->
+            <line x1="702" y1="75" x2="702" y2="95" stroke="#5C9AFF" stroke-width="1" marker-end="url(#ab)"/>
+
+            <!-- MULTIPLY -->
+            <rect x="400" y="138" width="200" height="32" rx="6" fill="var(--r)" opacity="0.12" stroke="var(--r)" stroke-width="1.5"/>
+            <text x="500" y="158" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" font-weight="700" fill="var(--r)">composite = spatial × ops</text>
+
+            <path d="M 310 124 L 310 140 L 400 153" stroke="var(--b)" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+            <path d="M 702 124 L 702 140 L 600 153" stroke="#5C9AFF" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+
+            <!-- Tier boxes -->
+            <rect x="680" y="100" width="65" height="26" rx="5" fill="var(--h)" opacity="0.2" stroke="var(--h)" stroke-width="1.2"/>
+            <text x="712" y="117" text-anchor="middle" font-family="Outfit" font-size="9" font-weight="700" fill="var(--h)">HIGH</text>
+
+            <rect x="755" y="100" width="55" height="26" rx="5" fill="var(--e)" opacity="0.2" stroke="var(--e)" stroke-width="1.2"/>
+            <text x="782" y="117" text-anchor="middle" font-family="Outfit" font-size="9" font-weight="700" fill="var(--e)">MOD</text>
+
+            <rect x="820" y="100" width="55" height="26" rx="5" fill="var(--ink3)" opacity="0.15" stroke="var(--ink3)" stroke-width="1.2"/>
+            <text x="847" y="117" text-anchor="middle" font-family="Outfit" font-size="9" font-weight="700" fill="var(--ink3)">LOW</text>
+
+            <rect x="885" y="100" width="65" height="26" rx="5" fill="var(--s)" opacity="0.2" stroke="var(--s)" stroke-width="1.2"/>
+            <text x="917" y="117" text-anchor="middle" font-family="Outfit" font-size="9" font-weight="700" fill="var(--s)">DECLINE</text>
+
+            <text x="712" y="140" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--h)">≥ 0.65</text>
+            <text x="782" y="140" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--e)">≥ 0.44</text>
+            <text x="847" y="140" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">≥ 0.30</text>
+            <text x="917" y="140" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="var(--s)">< 0.30</text>
+
+            <!-- Gate override -->
+            <rect x="785" y="150" width="160" height="20" rx="4" fill="var(--g)" opacity="0.1" stroke="var(--g)" stroke-width="0.8"/>
+            <text x="865" y="164" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="600" fill="var(--g)">gate_blocked → force DECLINE</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── B_spatial: Booking Classifier ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--b)"></div>
+        <div class="fcard-stock" style="color:var(--b)">B · SPATIAL</div>
+        <div class="fcard-title">6-Tier Booking Classifier</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fm"><span class="k" style="color:var(--b)">gravity</span>  = 2 if field>θ AND total>10
+            1 if field>θ, else 0
+<span class="k" style="color:var(--b)">comp</span>     = 1 if contested>θ, else 0
+
+<span class="v" style="color:var(--h)">A</span> STRONG Comp+Field  grav=2, comp=1
+<span class="v" style="color:var(--h)">B</span> STRONG Field        grav=2
+<span class="v" style="color:var(--e)">C</span> STRONG Comp+WEAK    grav=1, comp=1
+<span class="v" style="color:var(--ink3)">D</span> WEAK Field          grav=1
+<span class="v" style="color:var(--ink3)">E</span> STRONG Comp         comp=1
+<span class="v" style="color:var(--s)">F</span> Bad Field            default
+
+<span class="k" style="color:var(--b)">serviceable</span> = (green ∧ {A,B,C,E}) ∨ (orange ∧ {A,B})</div>
+      </div>
+    </div>
+
+    <!-- ── E + S: Exposure & Shock ── -->
+    <div class="fcard">
+      <div class="fcard-head">
+        <div class="fcard-dot" style="background:var(--e)"></div>
+        <div class="fcard-stock" style="color:var(--e)">E · EXPOSURE</div>
+        <span style="margin:0 6px;color:var(--ink3)">+</span>
+        <div class="fcard-dot" style="background:var(--s)"></div>
+        <div class="fcard-stock" style="color:var(--s)">S · SHOCK</div>
+        <div class="fcard-title" style="margin-left:auto;">Post-R Adjustments</div>
+      </div>
+      <div class="fcard-body">
+        <div class="fcard-visual">
+          <svg viewBox="0 0 480 90" xmlns="http://www.w3.org/2000/svg">
+            <rect width="480" height="90" fill="var(--e-bg)" rx="8"/>
+            <!-- E logic -->
+            <rect x="20" y="12" width="210" height="66" rx="6" fill="white" stroke="var(--e)" stroke-width="1.2"/>
+            <text x="125" y="30" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" font-weight="600" fill="var(--e)">E · EXPOSURE</text>
+            <text x="125" y="46" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" fill="var(--ink2)">ratio = pending / daily_slots</text>
+            <text x="125" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" fill="var(--ink2)">ratio > 2× → downgrade tier</text>
+            <text x="125" y="74" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--e)">HIGH→MOD→LOW→DECLINE</text>
+            <!-- S logic -->
+            <rect x="250" y="12" width="210" height="66" rx="6" fill="white" stroke="var(--s)" stroke-width="1.2"/>
+            <text x="355" y="30" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" font-weight="600" fill="var(--s)">S · SHOCK LEDGER</text>
+            <text x="355" y="46" text-anchor="middle" font-family="Outfit" font-size="7.5" fill="var(--ink2)">outage severity ≥ 3</text>
+            <text x="355" y="58" text-anchor="middle" font-family="Outfit" font-size="7.5" fill="var(--ink2)">decline spike (30d rate ≥ 0.85)</text>
+            <text x="355" y="70" text-anchor="middle" font-family="Outfit" font-size="7.5" fill="var(--ink2)">capacity > 3× slots</text>
+          </svg>
+        </div>
+        <div class="fm"><span class="k" style="color:var(--s)">shock</span>  = outage≥3 OR spike OR overload
+<span class="k" style="color:var(--e)">E_conc</span> = pending/slots > 2 → tier−1
+<span class="k" style="color:var(--h)">H</span>      = JSON(config) → every output row</div>
+        <div class="fcard-note">H (Calibration Memory) snapshots 11 config values to the output for reproducibility.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ════════════ §4 — CONFIGURATION ════════════ -->
+<div class="sec">
+  <div class="sec-tag">04 · Configuration</div>
+  <div class="sec-title">Key Parameters</div>
+
+  <div class="cfg-grid">
+    <div class="cfg">
+      <h4><i style="background:var(--b)"></i> Field Physics</h4>
+      <div class="cfg-r"><span class="cfg-k">H_INSTALL / DECLINE</span><span class="cfg-v">60m / 60m</span></div>
+      <div class="cfg-r"><span class="cfg-k">WEIGHT_INSTALL / DECLINE</span><span class="cfg-v">+1.0 / −1.5</span></div>
+      <div class="cfg-r"><span class="cfg-k">LAMBDA_DECAY</span><span class="cfg-v">0.005</span></div>
+      <div class="cfg-r"><span class="cfg-k">ADAPTIVE_H (k, min, max)</span><span class="cfg-v">3, 20m, 150m</span></div>
+      <div class="cfg-r"><span class="cfg-k">SHRINKAGE_K / MIN_RATIO</span><span class="cfg-v">4 / 0.45</span></div>
+    </div>
+    <div class="cfg">
+      <h4><i style="background:var(--b)"></i> Hex & Boundary</h4>
+      <div class="cfg-r"><span class="cfg-k">HEX_SIZES</span><span class="cfg-v">[0.05 … 0.25] km</span></div>
+      <div class="cfg-r"><span class="cfg-k">TILING_RADIUS</span><span class="cfg-v">3.0 km</span></div>
+      <div class="cfg-r"><span class="cfg-k">COMPETITION_RADIUS</span><span class="cfg-v">0.027° (~3km)</span></div>
+      <div class="cfg-r"><span class="cfg-k">BAD / MID SE deciles</span><span class="cfg-v">[1-3] / [4-7]</span></div>
+      <div class="cfg-r"><span class="cfg-k">BOUNDARY_FILTER</span><span class="cfg-v">ON (p30)</span></div>
+    </div>
+    <div class="cfg">
+      <h4><i style="background:var(--r)"></i> R Composite</h4>
+      <div class="cfg-r"><span class="cfg-k">W_FIELD / CONTESTED</span><span class="cfg-v">0.30 / 0.15</span></div>
+      <div class="cfg-r"><span class="cfg-k">W_EVIDENCE / COLOR</span><span class="cfg-v">0.20 / 0.20</span></div>
+      <div class="cfg-r"><span class="cfg-k">OPS_FLOOR</span><span class="cfg-v">0.20</span></div>
+      <div class="cfg-r"><span class="cfg-k">TIER: HIGH / MOD / LOW</span><span class="cfg-v">0.65 / 0.44 / 0.30</span></div>
+      <div class="cfg-r"><span class="cfg-k">FIELD / CONTEST THRESH</span><span class="cfg-v">−0.1 / −0.1</span></div>
+    </div>
+    <div class="cfg">
+      <h4><i style="background:var(--g)"></i> G Gatekeeper</h4>
+      <div class="cfg-r"><span class="cfg-k">DENSITY_RADIUS</span><span class="cfg-v">100m</span></div>
+      <div class="cfg-r"><span class="cfg-k">DENSITY_THRESHOLD</span><span class="cfg-v">30</span></div>
+      <div class="cfg-r"><span class="cfg-k">DECLINE_RATE_BLOCK</span><span class="cfg-v">0.85</span></div>
+      <div class="cfg-r"><span class="cfg-k">CAPACITY_OVERLOAD</span><span class="cfg-v">3.0×</span></div>
+    </div>
+    <div class="cfg">
+      <h4><i style="background:var(--s)"></i> S Shock</h4>
+      <div class="cfg-r"><span class="cfg-k">OUTAGE_SEVERITY</span><span class="cfg-v">≥ 3</span></div>
+      <div class="cfg-r"><span class="cfg-k">OUTAGE_RECENCY</span><span class="cfg-v">7 days</span></div>
+      <div class="cfg-r"><span class="cfg-k">DECLINE_SPIKE</span><span class="cfg-v">+30pp</span></div>
+      <div class="cfg-r"><span class="cfg-k">TICKET_OVERLOAD</span><span class="cfg-v">5</span></div>
+    </div>
+    <div class="cfg">
+      <h4><i style="background:var(--ink3)"></i> Date Windows</h4>
+      <div class="cfg-r"><span class="cfg-k">TRAIN</span><span class="cfg-v">2024-10-20 → 2025-10-19</span></div>
+      <div class="cfg-r"><span class="cfg-k">TEST</span><span class="cfg-v">2025-10-20 → 2025-11-09</span></div>
+      <div class="cfg-r"><span class="cfg-k">G1_LOOKBACK_EXTRA</span><span class="cfg-v">15 days</span></div>
+      <div class="cfg-r"><span class="cfg-k">INDETERMINATE_CUTOFF</span><span class="cfg-v">4 installs</span></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════ §5 — DATA SOURCES ════════════ -->
+<div class="sec">
+  <div class="sec-tag">05 · Data & Files</div>
+  <div class="sec-title">Sources & Codebase</div>
+
+  <div class="ds-grid" style="margin-bottom:16px;">
+    <div class="ds">
+      <h4>t_node_decisions_active <span class="ds-badge ds-sf">SF</span></h4>
+      <ul><li>Train + test decisions (partner, mobile, lat/lng, events)</li><li>→ get_train_data(), get_test_data(), get_partner_performance()</li></ul>
+    </div>
+    <div class="ds">
+      <h4>task_logs + booking_logs <span class="ds-badge ds-sf">SF</span></h4>
+      <ul><li>Lead lifecycle, slot confirmations, plan creation</li><li>→ get_pending_leads(), get_slot_confirmation(), daily_slots()</li></ul>
+    </div>
+    <div class="ds">
+      <h4>ticketvanilla_audit <span class="ds-badge ds-sf">SF</span></h4>
+      <ul><li>Service/pickup/cash tickets with TAT via LEAD() window</li><li>→ get_ticket_tasks() → compute_ticket_capacity()</li></ul>
+    </div>
+    <div class="ds">
+      <h4>outage_incidents <span class="ds-badge ds-sf">SF</span></h4>
+      <ul><li>Active router outages: severity, device_count</li><li>→ get_active_outages() → S shock ledger</li></ul>
+    </div>
+    <div class="ds">
+      <h4>t_serviceability_logs <span class="ds-badge ds-sf">SF</span></h4>
+      <ul><li>G1 distance checks: min_dist, zone, serviceable flag</li><li>→ get_g1_distance() for test merge + simulation</li></ul>
+    </div>
+    <div class="ds">
+      <h4>HDF5 Artifacts <span class="ds-badge ds-h5">H5</span></h4>
+      <ul><li>poly_stats_final.h5 — hex polys + SE + overlap + rank</li><li>partner_cluster_boundaries.h5 — DBSCAN boundaries</li><li>train_data.h5 — weighted training decisions</li></ul>
+    </div>
+  </div>
+
+  <div class="fm-grid">
+    <div class="fm-card">
+      <h4 style="color:var(--ink2)">Pipeline Steps</h4>
+      <ul>
+        <li><code>step1_train_maps.py</code> — IDW weights → hex search → DBSCAN → overlap</li>
+        <li><code>step2_score_test.py</code> — full GBRESH scoring + evaluation</li>
+        <li><code>step3_simpulate.py</code> — G1 decline simulation</li>
+      </ul>
+    </div>
+    <div class="fm-card">
+      <h4 style="color:var(--b)">Spatial Core</h4>
+      <ul>
+        <li><code>compute.py</code> — process(), gaussian field, hex assignment, contested</li>
+        <li><code>geometry/hex.py</code> — hex grid creation + best-size search</li>
+        <li><code>geometry/find_boundary.py</code> — DBSCAN boundary clustering</li>
+        <li><code>feature/hop_features.py</code> — 3-hop BallTree SE aggregation</li>
+      </ul>
+    </div>
+    <div class="fm-card">
+      <h4 style="color:#5C9AFF">Operational</h4>
+      <ul>
+        <li><code>data_fetch/get_ops_data.py</code> — all B_ops + S queries</li>
+        <li><code>feature/ops_features.py</code> — cap/rel/infra → operational_score</li>
+        <li><code>feature/composite.py</code> — R: spatial + ops → composite + tiers</li>
+      </ul>
+    </div>
+    <div class="fm-card">
+      <h4 style="color:var(--g)">Gates & Config</h4>
+      <ul>
+        <li><code>stocks/gatekeeper.py</code> — G: density + 3 partner gates</li>
+        <li><code>stocks/stocks_config.py</code> — all GBRESH tunable params</li>
+        <li><code>config.py</code> — hex, field, boundary, threshold config</li>
+        <li><code>data_fetch/wiom_data.py</code> — Snowflake connector</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════ §6 — DATA FETCH & SQL QUERIES ════════════ -->
+<div class="sec">
+  <div class="sec-tag">06 · Data Fetch Layer</div>
+  <div class="sec-title">SQL Queries by Stock</div>
+  <div class="sec-desc">Every Snowflake query in the codebase, mapped to the stock it feeds. All queries are executed via the <code>WiomData</code> Snowflake connector with key-pair auth.</div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- B_SPATIAL — TRAINING & TEST DATA                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="query-stock">
+    <div class="query-stock-header" style="background:var(--b-bg);border-color:var(--b);">
+      <div class="query-stock-icon" style="background:var(--b);">B<sub style="font-size:0.6em">s</sub></div>
+      <h3 style="color:var(--b);">B · Spatial — Training & Test Data<span>get_data.py → get_train_data(), get_test_data()</span></h3>
+    </div>
+    <div class="query-stock-body" style="border-color:var(--b);">
+
+      <!-- get_train_data / get_test_data -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--b-bg);color:var(--b);">get_train_data() / get_test_data()</span>
+          <span class="query-purpose">Fetches historical decisions for map training and test lead scoring. Same query, different date windows.</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">t_node_decisions_active</span>
+          <span class="query-tag query-tag-out">→ partner_id, mobile, lat/lng, installed_decision, final_decision</span>
+          <span class="query-tag query-tag-feeds">feeds → IDW field weights, hex generation, scoring</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">t_node_decisions_active</span>
+          </div>
+<pre><span class="kw">SELECT</span>
+    <span class="col">partner_id</span>, <span class="col">mobile</span>, <span class="col">first_notified_time</span>,
+    <span class="kw">CASE WHEN</span> <span class="col">lco_account_installed</span> <span class="op">=</span> <span class="col">partner_id</span>
+         <span class="kw">THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END AS</span> <span class="alias">installed_decision</span>,
+    <span class="col">latitude</span>, <span class="col">longitude</span>, <span class="col">installed_time</span>,
+    <span class="kw">CASE WHEN</span> <span class="col">lco_account_installed</span> <span class="op">=</span> <span class="col">partner_id</span>
+         <span class="kw">THEN</span> <span class="str">'INSTALLED'</span>
+         <span class="kw">ELSE</span> <span class="col">first_event</span> <span class="kw">END AS</span> <span class="alias">final_decision</span>,
+    <span class="col">active_base</span>, <span class="col">partner_tenure</span>,
+    <span class="col">first_event_time</span>, <span class="col">last_event</span>, <span class="col">last_event_time</span>, <span class="col">first_event</span>
+<span class="kw">FROM</span> <span class="tbl">t_node_decisions_active</span>
+<span class="kw">WHERE</span> <span class="col">first_event</span> <span class="kw">NOT IN</span> (<span class="str">''</span>, <span class="str">'None'</span>)
+  <span class="kw">AND CAST</span>(<span class="col">first_notified_time</span> <span class="kw">AS DATE</span>) <span class="kw">BETWEEN</span> <span class="str">'{start_dt}'</span> <span class="kw">AND</span> <span class="str">'{end_dt}'</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw → <code>process_dataframe()</code> <span class="query-chain-arrow">→</span> <code>standardise_decisions()</code> <span class="query-chain-arrow">→</span> INSTALLED / DECLINED / INDETERMINATE / HANGING
+        </div>
+        <div class="query-note">
+          <strong>Standardisation logic:</strong> Computes p40 of time_to_decide for INTERESTED→DECLINED. Fast declines (≤p40) → DECLINED. Slow declines (>p40) → INDETERMINATE. Still pending → HANGING. Then IDW-interpolated field_weight for ambiguous points.
+        </div>
+      </div>
+
+      <!-- get_g1_distance -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--b-bg);color:var(--b);">get_g1_distance()</span>
+          <span class="query-purpose">G1 serviceability check logs — min distance from lead to nearest partner coordinate. Used for distance-bucket analysis and decline simulation.</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">t_serviceability_logs</span>
+          <span class="query-tag query-tag-out">→ mobile, min_dist, dist_rng, lat/lng, zone_alias, serviceable</span>
+          <span class="query-tag query-tag-feeds">feeds → test merge (min_dist_bucket) + step 3 simulation</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">t_serviceability_logs</span>
+          </div>
+<pre><span class="kw">SELECT</span> <span class="col">mobile</span>, <span class="col">created_at</span> <span class="kw">AS</span> <span class="alias">decision_time</span>, <span class="col">min_dist</span>,
+  <span class="kw">CASE</span>
+    <span class="kw">WHEN</span> <span class="col">min_dist</span> <span class="op">&lt;=</span> <span class="num">5</span>  <span class="kw">THEN</span> <span class="str">'A. 0-5m'</span>
+    <span class="kw">WHEN</span> <span class="col">min_dist</span> <span class="op">&lt;=</span> <span class="num">10</span> <span class="kw">THEN</span> <span class="str">'B. 5-10m'</span>
+    <span class="cm">-- ... bins in 5m increments up to 100m ...</span>
+    <span class="kw">ELSE</span> <span class="str">'U. &gt;100m'</span>
+  <span class="kw">END AS</span> <span class="alias">dist_rng</span>,
+  <span class="col">latitude</span>, <span class="col">longitude</span>, <span class="col">g1_is_bdo_lead</span>, <span class="col">zone_alias</span>, <span class="col">serviceable</span>
+<span class="kw">FROM</span> (
+  <span class="kw">SELECT</span> <span class="op">*</span>, <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span>(<span class="kw">PARTITION BY</span> <span class="col">mobile</span> <span class="kw">ORDER BY</span> <span class="col">created_at</span> <span class="kw">DESC</span>) <span class="kw">AS</span> <span class="alias">row_cnt</span>
+  <span class="kw">FROM</span> (
+    <span class="kw">SELECT</span> <span class="op">*</span>,
+      <span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="col">extra_data</span>.<span class="col">nearest_coordinate</span>.<span class="col">distance</span> <span class="kw">AS</span> <span class="alias">min_dist</span>,
+      <span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="str">"serviceable"</span>::<span class="kw">BOOLEAN</span> <span class="kw">AS</span> <span class="alias">serviceable</span>,
+      <span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="col">extra_data</span>.<span class="col">nearest_coordinate</span>.<span class="col">zone_alias</span>::<span class="kw">STRING</span> <span class="kw">AS</span> <span class="alias">zone_alias</span>,
+      <span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="col">genie_downstream_context</span>.<span class="col">g1_is_bdo_lead</span>::<span class="kw">BOOLEAN</span> <span class="kw">AS</span> <span class="alias">g1_is_bdo_lead</span>,
+      <span class="fn">SPLIT</span>(<span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="col">genie_downstream_context</span>.<span class="col">g1_lead_coords</span>, <span class="str">','</span>)[<span class="num">0</span>]::<span class="kw">FLOAT</span> <span class="kw">AS</span> <span class="alias">latitude</span>,
+      <span class="fn">SPLIT</span>(<span class="fn">PARSE_JSON</span>(<span class="col">response</span>)<span class="op">:</span><span class="col">genie_downstream_context</span>.<span class="col">g1_lead_coords</span>, <span class="str">','</span>)[<span class="num">1</span>]::<span class="kw">FLOAT</span> <span class="kw">AS</span> <span class="alias">longitude</span>
+    <span class="kw">FROM</span> <span class="tbl">prod_db.mysql_rds_genie_genie1.t_serviceability_logs</span>
+    <span class="kw">WHERE CAST</span>(<span class="col">created_at</span> <span class="kw">AS DATE</span>) <span class="kw">BETWEEN</span> <span class="str">'{start_dt}'</span> <span class="kw">AND</span> <span class="str">'{end_dt}'</span>
+  )
+) <span class="kw">WHERE</span> <span class="alias">row_cnt</span> <span class="op">=</span> <span class="num">1</span>  <span class="cm">-- latest log per mobile</span></pre>
+        </div>
+        <div class="query-note">
+          Parses JSON response payload to extract distance, coordinates, and serviceability. ROW_NUMBER deduplicates to latest log per mobile.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- B_OPS — CAPACITY: LEAD LIFECYCLE                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="query-stock">
+    <div class="query-stock-header" style="background:var(--b-bg);border-color:#5C9AFF;">
+      <div class="query-stock-icon" style="background:#5C9AFF;">B<sub style="font-size:0.6em">o</sub></div>
+      <h3 style="color:#5C9AFF;">B · Operational — Capacity, Tickets, Reliability<span>get_ops_data.py → build_partner_ops_vector()</span></h3>
+    </div>
+    <div class="query-stock-body" style="border-color:#5C9AFF;">
+
+      <!-- get_pending_leads_per_partner -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--b-bg);color:#5C9AFF;">get_pending_leads_per_partner()</span>
+          <span class="query-purpose">Lead lifecycle reconstruction. Joins interest → decline/install/cancel events. Rows with ALL terminal events NULL = pending (feeds E exposure).</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">task_logs</span>
+          <span class="query-tag query-tag-table">booking_logs</span>
+          <span class="query-tag query-tag-out">→ mobile, partner_id, interest_time, decline_time, install_time, cancel_time</span>
+          <span class="query-tag query-tag-feeds">feeds → compute_lead_capacity() → nmbr_active_leads, queue_velocity</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL — 4 CTEs joined</span>
+            <span class="sql-block-table">task_logs + booking_logs</span>
+          </div>
+<pre><span class="kw">WITH</span> <span class="alias">interest</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="col">mobile</span>,
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">partner_id</span>::<span class="kw">STRING</span> <span class="kw">AS</span> <span class="alias">partner_id</span>,
+    <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">interest_time</span>,
+    <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span>(<span class="kw">PARTITION BY</span> <span class="col">mobile</span>, <span class="col">partner_id</span> <span class="kw">ORDER BY</span> <span class="col">added_time</span> <span class="kw">DESC</span>) <span class="kw">AS</span> <span class="alias">rn</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.task_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="op">=</span> <span class="str">'NOTIF_SENT'</span>
+    <span class="kw">AND CAST</span>(<span class="col">added_time</span> <span class="kw">AS DATE</span>) <span class="kw">BETWEEN</span> <span class="str">'{start}'</span> <span class="kw">AND</span> <span class="str">'{end}'</span>
+),
+<span class="alias">decline</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="col">mobile</span>, <span class="col">partner_id</span>,
+    <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">decline_time</span>,
+    <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span>(<span class="kw">PARTITION BY</span> <span class="col">mobile</span>, <span class="col">partner_id</span> <span class="kw">ORDER BY</span> <span class="col">added_time</span> <span class="kw">ASC</span>) <span class="kw">AS</span> <span class="alias">rn</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.task_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="kw">IN</span> (<span class="str">'DECLINED'</span>, <span class="str">'NOT_INTERESTED'</span>)
+),
+<span class="alias">install</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="col">mobile</span>,
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">lco_account_id</span>::<span class="kw">STRING</span> <span class="kw">AS</span> <span class="alias">partner_id</span>,
+    <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">install_time</span>, <span class="fn">ROW_NUMBER</span>() ... <span class="kw">AS</span> <span class="alias">rn</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.booking_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="op">=</span> <span class="str">'lead_state_changed'</span>
+    <span class="kw">AND</span> <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">state</span>::<span class="kw">STRING</span> <span class="op">=</span> <span class="str">'installed'</span>
+),
+<span class="alias">cancel</span> <span class="kw">AS</span> (
+  <span class="cm">-- same pattern, state IN ('cancelled','unservisable','refunded')</span>
+)
+<span class="kw">SELECT</span> <span class="alias">i</span>.<span class="col">mobile</span>, <span class="alias">i</span>.<span class="col">partner_id</span>, <span class="alias">i</span>.<span class="col">interest_time</span>,
+  <span class="alias">d</span>.<span class="col">decline_time</span>, <span class="alias">inst</span>.<span class="col">install_time</span>, <span class="alias">c</span>.<span class="col">cancel_time</span>,
+  <span class="fn">COALESCE</span>(<span class="alias">d</span>.<span class="col">decline_time</span>, <span class="alias">inst</span>.<span class="col">install_time</span>, <span class="alias">c</span>.<span class="col">cancel_time</span>) <span class="kw">AS</span> <span class="alias">decision_time</span>
+<span class="kw">FROM</span> <span class="alias">interest</span> <span class="alias">i</span>
+<span class="kw">LEFT JOIN</span> <span class="alias">decline</span>  <span class="alias">d</span>    <span class="kw">ON</span> <span class="alias">i</span>.<span class="col">mobile</span><span class="op">=</span><span class="alias">d</span>.<span class="col">mobile</span> <span class="kw">AND</span> <span class="alias">i</span>.<span class="col">partner_id</span><span class="op">=</span><span class="alias">d</span>.<span class="col">partner_id</span> <span class="kw">AND</span> <span class="alias">d</span>.<span class="alias">rn</span><span class="op">=</span><span class="num">1</span>
+<span class="kw">LEFT JOIN</span> <span class="alias">install</span>  <span class="alias">inst</span> <span class="kw">ON</span> ... <span class="kw">AND</span> <span class="alias">inst</span>.<span class="alias">rn</span><span class="op">=</span><span class="num">1</span>
+<span class="kw">LEFT JOIN</span> <span class="alias">cancel</span>   <span class="alias">c</span>    <span class="kw">ON</span> ... <span class="kw">AND</span> <span class="alias">c</span>.<span class="alias">rn</span><span class="op">=</span><span class="num">1</span>
+<span class="kw">WHERE</span> <span class="alias">i</span>.<span class="alias">rn</span> <span class="op">=</span> <span class="num">1</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw rows → <code>compute_lead_capacity(eval_time)</code> <span class="query-chain-arrow">→</span> pending = decision_time IS NULL <span class="query-chain-arrow">→</span> long_held = pending AND open > 24h <span class="query-chain-arrow">→</span> queue_velocity = resolved / total
+        </div>
+      </div>
+
+      <!-- get_ticket_tasks -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--b-bg);color:#5C9AFF;">get_ticket_tasks()</span>
+          <span class="query-purpose">Service / cash_collection / router_pickup tickets. Uses LEAD() window to compute how long each partner held each task.</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">ticketvanilla_audit</span>
+          <span class="query-tag query-tag-out">→ partner_id, ticket_type, tat_open_minutes, is_resolved, is_still_open</span>
+          <span class="query-tag query-tag-feeds">feeds → compute_ticket_capacity() → active_tickets, median_tat</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">ticketvanilla_audit</span>
+          </div>
+<pre><span class="kw">WITH</span> <span class="alias">assign_events</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    <span class="col">account_id</span> <span class="kw">AS</span> <span class="alias">long_customer_id</span>,
+    <span class="col">task_id</span>, <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">assign_time</span>,
+    <span class="col">assigned_account_id</span> <span class="kw">AS</span> <span class="alias">partner_id</span>,
+    <span class="col">type</span> <span class="kw">AS</span> <span class="alias">ticket_type</span>,
+    <span class="fn">LEAD</span>(<span class="col">added_time</span>) <span class="kw">OVER</span>(
+      <span class="kw">PARTITION BY</span> <span class="col">task_id</span> <span class="kw">ORDER BY</span> <span class="col">added_time</span>
+    ) <span class="kw">AS</span> <span class="alias">next_event_time</span>,
+    <span class="col">status</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.ticketvanilla_audit</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="kw">IN</span> (<span class="str">'ticket_assigned'</span>, <span class="str">'ticket_reopened'</span>, <span class="str">'task_created'</span>)
+    <span class="kw">AND LOWER</span>(<span class="col">assigned_to</span>) <span class="op">=</span> <span class="str">'partner'</span>
+    <span class="kw">AND LOWER</span>(<span class="col">type</span>) <span class="kw">IN</span> (<span class="str">'service'</span>, <span class="str">'cash_collection'</span>, <span class="str">'router_pickup'</span>)
+)
+<span class="kw">SELECT</span>
+  <span class="col">long_customer_id</span>, <span class="col">task_id</span>, <span class="col">partner_id</span>, <span class="col">ticket_type</span>,
+  <span class="col">assign_time</span>, <span class="col">next_event_time</span>,
+  <span class="fn">DATEDIFF</span>(<span class="kw">MINUTE</span>, <span class="col">assign_time</span>,
+    <span class="fn">COALESCE</span>(<span class="col">next_event_time</span>, <span class="fn">CURRENT_TIMESTAMP</span>)) <span class="kw">AS</span> <span class="alias">tat_open_minutes</span>,
+  <span class="kw">CASE WHEN LOWER</span>(<span class="col">status</span>) <span class="op">=</span> <span class="str">'resolved'</span> <span class="kw">THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END AS</span> <span class="alias">is_resolved</span>,
+  <span class="kw">CASE WHEN</span> <span class="col">next_event_time</span> <span class="kw">IS NULL THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END AS</span> <span class="alias">is_still_open</span>
+<span class="kw">FROM</span> <span class="alias">assign_events</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw → <code>compute_ticket_capacity()</code> <span class="query-chain-arrow">→</span> per-partner: active_tickets, median_tat_min, max_tat_min, ticket_resolution_rate
+        </div>
+      </div>
+
+      <!-- get_slot_confirmation -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--b-bg);color:#5C9AFF;">get_slot_confirmation()</span>
+          <span class="query-purpose">Measures partner reliability: gap between slot confirmation and plan creation. Close-distance tardiness penalised more heavily.</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">task_logs (CUSTOMER_SLOT_CONFIRMED)</span>
+          <span class="query-tag query-tag-table">booking_logs (trum_plan_created)</span>
+          <span class="query-tag query-tag-out">→ partner_id, slot_time, plan_time, late_arrive_days, nearest_distance</span>
+          <span class="query-tag query-tag-feeds">feeds → compute_reliability() → late_severity, plan_created_rate</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">task_logs ⋈ booking_logs</span>
+          </div>
+<pre><span class="kw">WITH</span> <span class="alias">slots</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="col">mobile</span>,
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">partner_id</span>::<span class="kw">STRING</span>       <span class="kw">AS</span> <span class="alias">partner_id</span>,
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">slot_selected</span>::<span class="kw">TIMESTAMP</span>  <span class="kw">AS</span> <span class="alias">slot_selected_time</span>,
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">nearestDistance</span>::<span class="kw">FLOAT</span>   <span class="kw">AS</span> <span class="alias">nearest_distance</span>,
+    <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">slot_confirmed_time</span>,
+    <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span>(<span class="kw">PARTITION BY</span> <span class="col">mobile</span> <span class="kw">ORDER BY</span> <span class="col">added_time</span> <span class="kw">DESC</span>) <span class="kw">AS</span> <span class="alias">rn</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.task_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="op">=</span> <span class="str">'CUSTOMER_SLOT_CONFIRMED'</span>
+    <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&gt;=</span> <span class="str">'{start_dt}'</span> <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&lt;=</span> <span class="str">'{end_dt}'</span>
+),
+<span class="alias">plans</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="col">mobile</span>, <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">plan_created_time</span>,
+    <span class="fn">ROW_NUMBER</span>() <span class="kw">OVER</span>(<span class="kw">PARTITION BY</span> <span class="col">mobile</span> <span class="kw">ORDER BY</span> <span class="col">added_time</span> <span class="kw">ASC</span>) <span class="kw">AS</span> <span class="alias">rn</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.booking_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="op">=</span> <span class="str">'trum_plan_created'</span>
+    <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&gt;=</span> <span class="str">'{start_dt}'</span> <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&lt;=</span> <span class="str">'{end_dt}'</span>
+)
+<span class="kw">SELECT</span> <span class="alias">s</span>.<span class="col">mobile</span>, <span class="alias">s</span>.<span class="col">partner_id</span>, <span class="alias">s</span>.<span class="col">slot_selected_time</span>,
+  <span class="alias">s</span>.<span class="col">slot_confirmed_time</span>, <span class="alias">s</span>.<span class="col">nearest_distance</span>,
+  <span class="alias">p</span>.<span class="col">plan_created_time</span>,
+  <span class="kw">CASE WHEN</span> <span class="alias">p</span>.<span class="col">mobile</span> <span class="kw">IS NOT NULL THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END AS</span> <span class="alias">plan_created_flag</span>,
+  <span class="fn">DATEDIFF</span>(<span class="kw">SECOND</span>, <span class="alias">s</span>.<span class="col">slot_confirmed_time</span>,
+    <span class="fn">COALESCE</span>(<span class="alias">p</span>.<span class="col">plan_created_time</span>, <span class="fn">CURRENT_TIMESTAMP</span>)) <span class="op">/</span> <span class="num">86400.0</span> <span class="kw">AS</span> <span class="alias">late_arrive_days</span>
+<span class="kw">FROM</span> <span class="alias">slots</span> <span class="alias">s</span>
+<span class="kw">LEFT JOIN</span> <span class="alias">plans</span> <span class="alias">p</span> <span class="kw">ON</span> <span class="alias">s</span>.<span class="col">mobile</span> <span class="op">=</span> <span class="alias">p</span>.<span class="col">mobile</span> <span class="kw">AND</span> <span class="alias">p</span>.<span class="alias">rn</span> <span class="op">=</span> <span class="num">1</span>
+<span class="kw">WHERE</span> <span class="alias">s</span>.<span class="alias">rn</span> <span class="op">=</span> <span class="num">1</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw → <code>compute_reliability()</code> <span class="query-chain-arrow">→</span> late_severity (ordinal 0–3) <span class="query-chain-arrow">→</span> late_close_penalty = late_days × 1/(distance+1) <span class="query-chain-arrow">→</span> planning_strength = plan_rate × count
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- G + B_OPS — PARTNER PERFORMANCE & SLOTS         -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="query-stock">
+    <div class="query-stock-header" style="background:var(--g-bg);border-color:var(--g);">
+      <div class="query-stock-icon" style="background:var(--g);">G</div>
+      <h3 style="color:var(--g);">G + B · Partner Performance & Expected Slots<span>get_ops_data.py → feeds gatekeeper + ops vector</span></h3>
+    </div>
+    <div class="query-stock-body" style="border-color:var(--g);">
+
+      <!-- get_partner_performance -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--g-bg);color:var(--g);">get_partner_performance()</span>
+          <span class="query-purpose">Per-partner SE, decline rate, and median response time. Dual-purpose: feeds G (non-responder gate via decline_rate_30d) and B_ops (se_30d, response metrics).</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">t_node_decisions_active</span>
+          <span class="query-tag query-tag-out">→ total_decisions, installs_30d, declines_30d, median_response_min</span>
+          <span class="query-tag query-tag-feeds">feeds → G: partner_block_gate (decline_rate ≥ 0.85)</span>
+          <span class="query-tag query-tag-feeds">feeds → B_ops: se_30d, response metrics</span>
+          <span class="query-tag query-tag-feeds">feeds → S: decline_spike shock</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">t_node_decisions_active</span>
+          </div>
+<pre><span class="kw">SELECT</span>
+  <span class="col">partner_id</span>,
+  <span class="fn">COUNT</span>(<span class="op">*</span>)       <span class="kw">AS</span> <span class="alias">total_decisions</span>,
+  <span class="fn">SUM</span>(<span class="kw">CASE WHEN</span> <span class="col">partner_id</span> <span class="op">=</span> <span class="col">lco_account_installed</span>
+    <span class="kw">THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END</span>)   <span class="kw">AS</span> <span class="alias">installs_30d</span>,
+  <span class="fn">SUM</span>(<span class="kw">CASE WHEN</span> <span class="col">first_event</span> <span class="op">=</span> <span class="str">'DECLINED'</span>
+    <span class="kw">THEN</span> <span class="num">1</span> <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END</span>)   <span class="kw">AS</span> <span class="alias">declines_30d</span>,
+  <span class="fn">MEDIAN</span>(<span class="col">reaction_time_notif</span>)  <span class="kw">AS</span> <span class="alias">median_response_min</span>,
+  <span class="fn">AVG</span>(<span class="col">reaction_time_notif</span>)     <span class="kw">AS</span> <span class="alias">mean_response_min</span>
+<span class="kw">FROM</span> <span class="tbl">t_node_decisions_active</span>
+<span class="kw">WHERE</span> <span class="col">first_notified_time</span> <span class="op">&gt;=</span> <span class="fn">DATEADD</span>(<span class="kw">DAY</span>, <span class="op">-</span><span class="num">30</span>, <span class="str">'{end_dt}'</span>)
+  <span class="kw">AND</span> <span class="col">first_notified_time</span> <span class="op">&lt;=</span> <span class="str">'{end_dt}'</span>
+  <span class="kw">AND</span> <span class="col">first_event</span> <span class="kw">IS NOT NULL</span>
+  <span class="kw">AND</span> <span class="col">first_event</span> <span class="kw">NOT IN</span> (<span class="str">''</span>, <span class="str">'None'</span>)
+<span class="kw">GROUP BY</span> <span class="col">partner_id</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw → Python computes: <code>se_30d = installs / total</code> <span class="query-chain-arrow">→</span> <code>decline_rate_30d = declines / total</code>
+        </div>
+        <div class="query-note">
+          This is the <strong>starting frame</strong> for the full ops vector merge — all other ops data sources left-join onto this. If this query returns empty, the entire ops vector is empty.
+        </div>
+      </div>
+
+      <!-- get_expected_daily_slots -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--g-bg);color:var(--g);">get_expected_daily_slots()</span>
+          <span class="query-purpose">Rolling average daily installs per partner over 45-day window. Used by G (capacity_gate), E (exposure ratio), and S (capacity_overload shock).</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">booking_logs</span>
+          <span class="query-tag query-tag-out">→ partner_id, expected_daily_slots, active_days</span>
+          <span class="query-tag query-tag-feeds">feeds → G: capacity_gate (pending ≥ 3× slots)</span>
+          <span class="query-tag query-tag-feeds">feeds → E: exposure_ratio = pending / slots</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">booking_logs</span>
+          </div>
+<pre><span class="kw">WITH</span> <span class="alias">daily</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">lco_account_id</span>::<span class="kw">STRING</span> <span class="kw">AS</span> <span class="alias">partner_id</span>,
+    <span class="kw">CAST</span>(<span class="col">added_time</span> <span class="kw">AS DATE</span>) <span class="kw">AS</span> <span class="alias">dt</span>,
+    <span class="fn">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> <span class="alias">daily_installs</span>
+  <span class="kw">FROM</span> <span class="tbl">prod_db.public.booking_logs</span>
+  <span class="kw">WHERE</span> <span class="col">event_name</span> <span class="op">=</span> <span class="str">'lead_state_changed'</span>
+    <span class="kw">AND</span> <span class="fn">TRY_PARSE_JSON</span>(<span class="col">data</span>)<span class="op">:</span><span class="col">state</span>::<span class="kw">STRING</span> <span class="op">=</span> <span class="str">'installed'</span>
+    <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&gt;=</span> <span class="fn">DATEADD</span>(<span class="kw">DAY</span>, <span class="op">-</span><span class="num">45</span>, <span class="str">'{end_dt}'</span>)
+    <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&lt;=</span> <span class="str">'{end_dt}'</span>
+  <span class="kw">GROUP BY</span> <span class="num">1</span>, <span class="num">2</span>
+)
+<span class="kw">SELECT</span>
+  <span class="col">partner_id</span>,
+  <span class="fn">AVG</span>(<span class="col">daily_installs</span>)    <span class="kw">AS</span> <span class="alias">expected_daily_slots</span>,
+  <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> <span class="col">dt</span>)    <span class="kw">AS</span> <span class="alias">active_days</span>,
+  <span class="fn">SUM</span>(<span class="col">daily_installs</span>)    <span class="kw">AS</span> <span class="alias">total_installs_period</span>
+<span class="kw">FROM</span> <span class="alias">daily</span>
+<span class="kw">GROUP BY</span> <span class="col">partner_id</span></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- S — SHOCK LEDGER                                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="query-stock">
+    <div class="query-stock-header" style="background:var(--s-bg);border-color:var(--s);">
+      <div class="query-stock-icon" style="background:var(--s);">S</div>
+      <h3 style="color:var(--s);">S · Shock Ledger — Outage Data<span>get_ops_data.py → get_active_outages() → compute_shock_flags()</span></h3>
+    </div>
+    <div class="query-stock-body" style="border-color:var(--s);">
+
+      <!-- get_active_outages -->
+      <div class="query-card">
+        <div class="query-card-top">
+          <span class="query-fn-badge" style="background:var(--s-bg);color:var(--s);">get_active_outages()</span>
+          <span class="query-purpose">Active router outages within the recency window (default 7 days). Severity ≥ 3 triggers an outage shock flag.</span>
+        </div>
+        <div class="query-io">
+          <span class="query-tag query-tag-table">outage_incidents_aggregated</span>
+          <span class="query-tag query-tag-out">→ partner_id, severity, device_count, outage_recency_hours</span>
+          <span class="query-tag query-tag-feeds">feeds → compute_shock_flags() → has_shock per partner</span>
+        </div>
+        <div class="sql-block">
+          <div class="sql-block-header">
+            <span class="sql-block-label">Snowflake SQL</span>
+            <span class="sql-block-table">outage_incidents_aggregated</span>
+          </div>
+<pre><span class="kw">SELECT</span>
+  <span class="col">partner_id</span>,
+  <span class="col">severity</span>,
+  <span class="col">device_count</span>,
+  <span class="col">size_bucket</span>,
+  <span class="col">status</span>,
+  <span class="col">added_time</span> <span class="kw">AS</span> <span class="alias">outage_time</span>,
+  <span class="fn">DATEDIFF</span>(<span class="kw">HOUR</span>, <span class="col">added_time</span>, <span class="fn">CURRENT_TIMESTAMP</span>) <span class="kw">AS</span> <span class="alias">outage_recency_hours</span>
+<span class="kw">FROM</span> <span class="tbl">prod_db.BUSINESS_EFFICIENCY_ROUTER_OUTAGE_DETECTION_AUDIT_PUBLIC</span>
+     .<span class="tbl">outage_incidents_aggregated</span>
+<span class="kw">WHERE LOWER</span>(<span class="col">status</span>) <span class="op">=</span> <span class="str">'active'</span>
+  <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&gt;=</span> <span class="fn">DATEADD</span>(<span class="kw">DAY</span>, <span class="op">-</span><span class="num">7</span>, <span class="str">'{end_dt}'</span>)
+  <span class="kw">AND</span> <span class="col">added_time</span> <span class="op">&lt;=</span> <span class="str">'{end_dt}'</span></pre>
+        </div>
+        <div class="query-chain">
+          Raw → <code>compute_shock_flags()</code> assembles 3 shock types:
+        </div>
+        <div class="query-note">
+          <strong>① outage:</strong> max_severity ≥ 3 from this query<br>
+          <strong>② decline_spike:</strong> decline_rate_30d ≥ 0.85 (from get_partner_performance)<br>
+          <strong>③ capacity_overload:</strong> nmbr_active_leads > 3× expected_daily_slots (from lead_capacity × slots)<br>
+          Output: <code>has_shock</code> (0/1) + <code>shock_types</code> (pipe-delimited) per partner → merged into ops vector → feeds G shock_gate + B_ops infrastructure_score
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- OPS VECTOR ASSEMBLY VISUAL                      -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div class="query-stock" style="margin-bottom:0;">
+    <div class="query-stock-header" style="background:var(--bg);border-color:var(--rule2);">
+      <div class="query-stock-icon" style="background:var(--ink2);">⊕</div>
+      <h3>Ops Vector Assembly<span>build_partner_ops_vector() — merge order</span></h3>
+    </div>
+    <div class="query-stock-body" style="border-color:var(--rule2);">
+      <div class="query-card">
+        <div class="fcard-visual" style="margin-bottom:0;">
+          <svg viewBox="0 0 960 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="oap" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7C5CFC"/></marker>
+              <marker id="oab" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#2573EB"/></marker>
+              <marker id="oar" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#E8432A"/></marker>
+              <marker id="oae" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="7" markerHeight="5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#D4920A"/></marker>
+            </defs>
+            <rect width="960" height="200" fill="white" rx="8"/>
+
+            <!-- Base frame -->
+            <rect x="20" y="20" width="140" height="45" rx="6" fill="var(--g-bg)" stroke="var(--g)" stroke-width="1.2"/>
+            <text x="90" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--g)">partner_performance</text>
+            <text x="90" y="52" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">BASE FRAME</text>
+
+            <text x="172" y="45" font-family="Outfit" font-size="14" fill="var(--ink3)">⟵</text>
+            <text x="178" y="52" font-family="IBM Plex Mono" font-size="6" fill="var(--ink3)">start</text>
+
+            <!-- Merge 1 -->
+            <rect x="200" y="20" width="120" height="45" rx="6" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1"/>
+            <text x="260" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="500" fill="#5C9AFF">lead_capacity</text>
+            <text x="260" y="52" text-anchor="middle" font-family="Outfit" font-size="6.5" fill="var(--ink3)">LEFT JOIN</text>
+
+            <!-- Merge 2 -->
+            <rect x="330" y="20" width="120" height="45" rx="6" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1"/>
+            <text x="390" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="500" fill="#5C9AFF">ticket_capacity</text>
+            <text x="390" y="52" text-anchor="middle" font-family="Outfit" font-size="6.5" fill="var(--ink3)">LEFT JOIN</text>
+
+            <!-- Merge 3 -->
+            <rect x="460" y="20" width="110" height="45" rx="6" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1"/>
+            <text x="515" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="500" fill="#5C9AFF">reliability</text>
+            <text x="515" y="52" text-anchor="middle" font-family="Outfit" font-size="6.5" fill="var(--ink3)">LEFT JOIN</text>
+
+            <!-- Merge 4 -->
+            <rect x="580" y="20" width="110" height="45" rx="6" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1"/>
+            <text x="635" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="500" fill="#5C9AFF">daily_slots</text>
+            <text x="635" y="52" text-anchor="middle" font-family="Outfit" font-size="6.5" fill="var(--ink3)">LEFT JOIN</text>
+
+            <!-- Merge 5 -->
+            <rect x="700" y="20" width="110" height="45" rx="6" fill="var(--s-bg)" stroke="var(--s)" stroke-width="1"/>
+            <text x="755" y="38" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" font-weight="500" fill="var(--s)">shock_flags</text>
+            <text x="755" y="52" text-anchor="middle" font-family="Outfit" font-size="6.5" fill="var(--ink3)">LEFT JOIN</text>
+
+            <!-- Arrows between -->
+            <line x1="160" y1="42" x2="200" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+            <line x1="320" y1="42" x2="330" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+            <line x1="450" y1="42" x2="460" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+            <line x1="570" y1="42" x2="580" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+            <line x1="690" y1="42" x2="700" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+
+            <!-- Result -->
+            <rect x="830" y="15" width="115" height="55" rx="8" fill="var(--ink)" stroke="none"/>
+            <text x="887" y="37" text-anchor="middle" font-family="Outfit" font-size="8" font-weight="700" fill="white">OPS VECTOR</text>
+            <text x="887" y="52" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="rgba(255,255,255,0.6)">~20 cols/partner</text>
+            <text x="887" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="rgba(255,255,255,0.6)">fillna(0) applied</text>
+            <line x1="810" y1="42" x2="830" y2="42" stroke="var(--ink3)" stroke-width="0.8"/>
+
+            <!-- Downstream consumers -->
+            <text x="20" y="95" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--ink2)">DOWNSTREAM CONSUMERS:</text>
+
+            <!-- G -->
+            <rect x="20" y="108" width="200" height="36" rx="6" fill="var(--g-bg)" stroke="var(--g)" stroke-width="1"/>
+            <text x="120" y="123" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--g)">G · run_gates(df_test, df_train, df_ops)</text>
+            <text x="120" y="136" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">partner_block + capacity + shock gates</text>
+
+            <!-- B_ops score -->
+            <rect x="240" y="108" width="200" height="36" rx="6" fill="var(--b-bg)" stroke="#5C9AFF" stroke-width="1"/>
+            <text x="340" y="123" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="#5C9AFF">B · compute_operational_score()</text>
+            <text x="340" y="136" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">cap + rel + infra → operational_score [0,1]</text>
+
+            <!-- R -->
+            <rect x="460" y="108" width="200" height="36" rx="6" fill="var(--r-bg)" stroke="var(--r)" stroke-width="1"/>
+            <text x="560" y="123" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--r)">R · fuse_spatial_operational()</text>
+            <text x="560" y="136" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">composite = spatial × operational</text>
+
+            <!-- E -->
+            <rect x="680" y="108" width="200" height="36" rx="6" fill="var(--e-bg)" stroke="var(--e)" stroke-width="1"/>
+            <text x="780" y="123" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" font-weight="600" fill="var(--e)">E · exposure_ratio check</text>
+            <text x="780" y="136" text-anchor="middle" font-family="Outfit" font-size="7" fill="var(--ink3)">pending / daily_slots &gt; 2× → downgrade</text>
+
+            <!-- Arrows down -->
+            <line x1="887" y1="70" x2="887" y2="86" stroke="var(--ink)" stroke-width="1.2"/>
+            <line x1="887" y1="86" x2="120" y2="86" stroke="var(--ink3)" stroke-width="0.6" stroke-dasharray="3,2"/>
+            <line x1="887" y1="86" x2="340" y2="86" stroke="var(--ink3)" stroke-width="0.6" stroke-dasharray="3,2"/>
+            <line x1="887" y1="86" x2="560" y2="86" stroke="var(--ink3)" stroke-width="0.6" stroke-dasharray="3,2"/>
+            <line x1="887" y1="86" x2="780" y2="86" stroke="var(--ink3)" stroke-width="0.6" stroke-dasharray="3,2"/>
+            <line x1="120" y1="86" x2="120" y2="108" stroke="var(--g)" stroke-width="1" marker-end="url(#oap)"/>
+            <line x1="340" y1="86" x2="340" y2="108" stroke="#5C9AFF" stroke-width="1" marker-end="url(#oab)"/>
+            <line x1="560" y1="86" x2="560" y2="108" stroke="var(--r)" stroke-width="1" marker-end="url(#oar)"/>
+            <line x1="780" y1="86" x2="780" y2="108" stroke="var(--e)" stroke-width="1" marker-end="url(#oae)"/>
+
+            <!-- Column summary -->
+            <text x="20" y="170" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">COLUMNS: partner_id | se_30d, decline_rate_30d, median_response_min | nmbr_active_leads, long_held_leads_24h, queue_velocity |</text>
+            <text x="20" y="183" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">active_tickets, median_tat_min, ticket_resolution_rate | late_arrive_median, plan_created_rate, late_severity_max |</text>
+            <text x="20" y="196" font-family="IBM Plex Mono" font-size="7" fill="var(--ink3)">expected_daily_slots, active_days | has_shock, shock_types | capacity_score, reliability_score, infrastructure_score, operational_score</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</main>
+</body>
+</html>

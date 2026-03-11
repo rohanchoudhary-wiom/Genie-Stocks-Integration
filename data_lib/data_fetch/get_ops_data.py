@@ -34,7 +34,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
                 PARTITION BY mobile, TRY_PARSE_JSON(data):partner_id::STRING
                 ORDER BY added_time DESC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.task_logs
+        FROM prod_db.public.task_logs
         WHERE event_name = 'NOTIF_SENT'
           AND CAST(added_time AS DATE) BETWEEN '{start_dt}' AND '{end_dt}'
     ),
@@ -47,7 +47,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
                 PARTITION BY mobile, TRY_PARSE_JSON(data):partner_id::STRING
                 ORDER BY added_time ASC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.task_logs
+        FROM prod_db.public.task_logs
         WHERE event_name IN ('DECLINED','NOT_INTERESTED')
           AND CAST(added_time AS DATE) BETWEEN '{start_dt}' AND '{end_dt}'
     ),
@@ -60,7 +60,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
                 PARTITION BY mobile, TRY_PARSE_JSON(data):lco_account_id::STRING
                 ORDER BY added_time ASC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.booking_logs
+        FROM prod_db.public.booking_logs
         WHERE event_name = 'lead_state_changed'
           AND TRY_PARSE_JSON(data):state::STRING = 'installed'
           AND CAST(added_time AS DATE) BETWEEN '{start_dt}' AND '{end_dt}'
@@ -74,7 +74,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
                 PARTITION BY mobile, TRY_PARSE_JSON(data):lco_account_id::STRING
                 ORDER BY added_time ASC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.booking_logs
+        FROM prod_db.public.booking_logs
         WHERE event_name = 'lead_state_changed'
           AND TRY_PARSE_JSON(data):state::STRING IN ('cancelled','unservisable','refunded')
           AND CAST(added_time AS DATE) BETWEEN '{start_dt}' AND '{end_dt}'
@@ -173,7 +173,7 @@ def get_ticket_tasks(start_dt: str, end_dt: str) -> pd.DataFrame:
                 PARTITION BY task_id ORDER BY added_time
             )                              AS next_event_time,
             status
-        FROM prod_db.mysql_rds_genie_genie1.ticketvanilla_audit
+        FROM prod_db.public.ticketvanilla_audit
         WHERE event_name IN ('ticket_assigned', 'ticket_reopened', 'task_created')
           AND LOWER(assigned_to) = 'partner'
           AND LOWER(type) IN ({types_str})
@@ -237,11 +237,13 @@ def compute_ticket_capacity(df_tickets: pd.DataFrame) -> pd.DataFrame:
 # B_OPERATIONAL — SLOT CONFIRMATION / RELIABILITY
 # =====================================================================
 
-def get_slot_confirmation(start_dt: str) -> pd.DataFrame:
+def get_slot_confirmation(start_dt: str, end_dt: str = None) -> pd.DataFrame:
     """
     Slot confirmation → plan creation join.
     Measures partner tardiness: gap between slot and plan.
     """
+    end_ref = f"'{end_dt}'" if end_dt else "CURRENT_TIMESTAMP"
+
     query = f"""
     WITH slots AS (
         SELECT
@@ -253,9 +255,9 @@ def get_slot_confirmation(start_dt: str) -> pd.DataFrame:
             ROW_NUMBER() OVER (
                 PARTITION BY mobile ORDER BY added_time DESC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.task_logs
+        FROM prod_db.public.task_logs
         WHERE event_name = 'CUSTOMER_SLOT_CONFIRMED'
-          AND added_time >= '{start_dt}'
+          AND added_time >= '{start_dt}' and added_time <= {end_ref}
     ),
     plans AS (
         SELECT
@@ -264,9 +266,9 @@ def get_slot_confirmation(start_dt: str) -> pd.DataFrame:
             ROW_NUMBER() OVER (
                 PARTITION BY mobile ORDER BY added_time ASC
             ) AS rn
-        FROM prod_db.mysql_rds_genie_genie1.booking_logs
+        FROM prod_db.public.booking_logs
         WHERE event_name = 'trum_plan_created'
-          AND added_time >= '{start_dt}'
+          AND added_time >= '{start_dt}' and added_time <= {end_ref}
     )
     SELECT
         s.mobile,
@@ -350,11 +352,13 @@ def compute_reliability(df_slots: pd.DataFrame) -> pd.DataFrame:
 # G + B_OPERATIONAL — PER-PARTNER SE + DECLINE RATE + RESPONSE TIME
 # =====================================================================
 
-def get_partner_performance(lookback_days: int = 30) -> pd.DataFrame:
+def get_partner_performance(lookback_days: int = 30, end_dt: str = None) -> pd.DataFrame:
     """
     Per-partner SE, decline rate, and median response time from
     t_node_decisions_active.  Feeds G (non-responder gate) + B_operational.
     """
+    end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
+
     query = f"""
     SELECT
         partner_id,
@@ -364,7 +368,8 @@ def get_partner_performance(lookback_days: int = 30) -> pd.DataFrame:
         MEDIAN(reaction_time_notif)                                                AS median_response_min,
         AVG(reaction_time_notif)                                                   AS mean_response_min
     FROM t_node_decisions_active
-    WHERE first_notified_time >= DATEADD(DAY, -{lookback_days}, CURRENT_DATE)
+    WHERE first_notified_time >= DATEADD(DAY, -{lookback_days}, {end_ref})
+      and first_notified_time <= {end_ref}
       AND first_event IS NOT NULL
       AND first_event NOT IN ('', 'None')
     GROUP BY partner_id
@@ -389,20 +394,22 @@ def get_partner_performance(lookback_days: int = 30) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def get_expected_daily_slots(lookback_days: int = 45) -> pd.DataFrame:
+def get_expected_daily_slots(lookback_days: int = 45, end_dt : str = None) -> pd.DataFrame:
     """
     Rolling average daily installs per partner from booking_logs.
     """
+    end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
     query = f"""
     WITH daily AS (
         SELECT
             TRY_PARSE_JSON(data):lco_account_id::STRING AS partner_id,
             CAST(added_time AS DATE)                     AS dt,
             COUNT(*)                                     AS daily_installs
-        FROM prod_db.mysql_rds_genie_genie1.booking_logs
+        FROM prod_db.public.booking_logs
         WHERE event_name = 'lead_state_changed'
           AND TRY_PARSE_JSON(data):state::STRING = 'installed'
-          AND added_time >= DATEADD(DAY, -{lookback_days}, CURRENT_DATE)
+          AND added_time >= DATEADD(DAY, -{lookback_days}, {end_ref})
+          and added_time <= {end_ref}
         GROUP BY 1, 2
     )
     SELECT
@@ -430,11 +437,12 @@ def get_expected_daily_slots(lookback_days: int = 45) -> pd.DataFrame:
 # S — SHOCK LEDGER
 # =====================================================================
 
-def get_active_outages(recency_days: int = 7) -> pd.DataFrame:
+def get_active_outages(recency_days: int = 7, end_dt : str = None) -> pd.DataFrame:
     """
     Active outages from outage_incidents_aggregated.
     Table exists in system map but wasn't queried in production.
     """
+    end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
     query = f"""
     SELECT
         partner_id,
@@ -444,9 +452,10 @@ def get_active_outages(recency_days: int = 7) -> pd.DataFrame:
         status,
         added_time                                                        AS outage_time,
         DATEDIFF(HOUR, added_time, CURRENT_TIMESTAMP)                     AS outage_recency_hours
-    FROM prod_db.ds_tables.outage_incidents_aggregated
+    FROM prod_db.BUSINESS_EFFICIENCY_ROUTER_OUTAGE_DETECTION_AUDIT_PUBLIC.outage_incidents_aggregated
     WHERE LOWER(status) = 'active'
-      AND added_time >= DATEADD(DAY, -{recency_days}, CURRENT_DATE)
+      AND added_time >= DATEADD(DAY, -{recency_days}, {end_ref})
+      and added_time <= {end_ref}
     """
     try:
         df = _query_snowflake_df(query)
@@ -559,24 +568,26 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
     """
     print("[OPS VECTOR] Pulling lead lifecycle...")
     df_leads_raw = get_pending_leads_per_partner(start_dt, end_dt)
-    df_lead_cap = compute_lead_capacity(df_leads_raw)
+    eval_time = pd.Timestamp(end_dt)
+
+    df_lead_cap = compute_lead_capacity(df_leads_raw, eval_time)
 
     print("[OPS VECTOR] Pulling ticket tasks...")
     df_tickets_raw = get_ticket_tasks(start_dt, end_dt)
     df_ticket_cap = compute_ticket_capacity(df_tickets_raw)
 
     print("[OPS VECTOR] Pulling slot confirmation...")
-    df_slots_raw = get_slot_confirmation(sc.OPS_SLOT_LOOKBACK_DATE)
+    df_slots_raw = get_slot_confirmation(sc.OPS_SLOT_LOOKBACK_DATE, end_dt=end_dt)
     df_reliability = compute_reliability(df_slots_raw)
 
     print("[OPS VECTOR] Pulling partner performance (SE + decline rate + response)...")
-    df_perf = get_partner_performance(lookback_days=sc.OPS_SE_WINDOW_DAYS)
+    df_perf = get_partner_performance(lookback_days=sc.OPS_SE_WINDOW_DAYS, end_dt=end_dt)
 
     print("[OPS VECTOR] Pulling expected daily slots...")
-    df_slots = get_expected_daily_slots(lookback_days=sc.OPS_SLOTS_ROLLING_DAYS)
+    df_slots = get_expected_daily_slots(lookback_days=sc.OPS_SLOTS_ROLLING_DAYS, end_dt=end_dt)
 
     print("[OPS VECTOR] Computing shock flags...")
-    df_outages = get_active_outages(recency_days=sc.SHOCK_OUTAGE_RECENCY_DAYS)
+    df_outages = get_active_outages(recency_days=sc.SHOCK_OUTAGE_RECENCY_DAYS, end_dt=end_dt)
     df_shocks = compute_shock_flags(df_outages, df_perf, df_lead_cap, df_slots)
 
     # --- Merge all into a single partner-level frame ---

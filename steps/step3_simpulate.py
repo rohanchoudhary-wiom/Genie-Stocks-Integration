@@ -10,9 +10,9 @@ from data_lib.data_fetch.get_data import get_g1_distance
 from data_lib.compute import process as compute_process
 from data_lib.geometry.geometric_features import calculate_adaptive_h
 from data_lib.data_fetch.get_ops_data import build_partner_ops_vector
-from data_lib.gate import run_gates
+from data_lib.stocks.gatekeeper import run_gates
 from data_lib.feature.ops_features import compute_operational_score
-from data_lib.composite import compute_composite
+from data_lib.feature.composite import compute_composite
 
 def run_declines_simulation(df_train, df_poly, df_bound, g1_start, g1_end, reports_dir):
     print("\n--- SIMULATION: DECLINES (G1) ---")

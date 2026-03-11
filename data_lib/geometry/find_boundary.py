@@ -144,11 +144,11 @@ def run_find_boundary():
         )
 
     boundaries_df = pd.DataFrame(boundary_summary)
-    boundaries_df.to_hdf("partner_cluster_boundaries.h5", key="df", mode="w")
+    boundaries_df.to_hdf("artifacts/partner_cluster_boundaries.h5", key="df", mode="w")
     boundaries_df.drop(
         columns=["boundary_poly"], inplace=True
     )  # Drop shapely obj for CSV
-    boundaries_df.to_csv("partner_cluster_boundaries.csv", index=False)
+    boundaries_df.to_csv("artifacts/partner_cluster_boundaries.csv", index=False)
     print("\nFINAL BOUNDARY SUMMARY")
     print(boundaries_df.head(10))
 
