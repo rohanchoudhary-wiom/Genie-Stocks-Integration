@@ -98,9 +98,9 @@ R_WEIGHT_SE_30D = 0.10
 R_MIN_WEIGHT = 0.05
 
 # Confidence tier boundaries (on normalised composite 0–1)
-R_TIER_DECLINE = 0.30
-R_TIER_LOW = 0.44
-R_TIER_MOD = 0.65
+R_TIER_DECLINE = 0.1
+R_TIER_LOW = 0.2
+R_TIER_MOD = 0.35
 # above MOD → HIGH
 
 # R fusion: partner_score = spatial_shrunk × operational_score
