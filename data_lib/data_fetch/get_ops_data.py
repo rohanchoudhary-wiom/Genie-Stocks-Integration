@@ -450,12 +450,12 @@ def get_active_outages(recency_days: int = 7, end_dt : str = None) -> pd.DataFra
         device_count,
         size_bucket,
         status,
-        added_time                                                        AS outage_time,
-        DATEDIFF(HOUR, added_time, CURRENT_TIMESTAMP)                     AS outage_recency_hours
+        created_at_ist                                                        AS outage_time,
+        DATEDIFF(HOUR, created_at_ist, CURRENT_TIMESTAMP)                     AS outage_recency_hours
     FROM prod_db.BUSINESS_EFFICIENCY_ROUTER_OUTAGE_DETECTION_AUDIT_PUBLIC.outage_incidents_aggregated
     WHERE LOWER(status) = 'active'
-      AND added_time >= DATEADD(DAY, -{recency_days}, {end_ref})
-      and added_time <= {end_ref}
+      AND created_at_ist >= DATEADD(DAY, -{recency_days}, {end_ref})
+      and created_at_ist <= {end_ref}
     """
     try:
         df = _query_snowflake_df(query)

@@ -223,6 +223,6 @@ def compute_composite(
     print("\n--- R (PROMISE GOVERNOR) — COMPOSITE SCORING ---")
 
     df = compute_spatial_components(df_scored)
-    df = fuse_spatial_operational(df, df_ops_scored)
+    #df = fuse_spatial_operational(df, df_ops_scored)
 
     return df

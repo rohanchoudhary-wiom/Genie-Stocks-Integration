@@ -48,6 +48,9 @@ def main(simulate=False):
     REPORTS_DIR = os.path.join(PARENT_DIR, "reports")
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
+    cache_scored_csv = os.path.join(REPORTS_DIR, "scored_df.csv")
+    cache_scored_h5 = os.path.join(REPORTS_DIR, "scored_df.h5")
+
     # 1. Load Artifacts
     try:
         poly_path = os.path.join(ARTIFACTS_DIR, "poly_stats_final.h5")
@@ -101,13 +104,18 @@ def main(simulate=False):
     print(f"Aggregated test decisions: {before} rows -> {len(df_test)} unique mobiles")
 
     # B_OPERATIONAL
-    df_ops = build_partner_ops_vector(config.TEST_START_DATE, config.TEST_END_DATE)
-    print(f"\n\nDF OPS built {df_ops.shape}\n {df_ops.head()}\n\n")
+    # Leak-free ops for scoring
+    df_ops_train = build_partner_ops_vector(config.TRAIN_START_DATE, config.TRAIN_END_DATE)
+
+    # Test-window ops for evaluation/reporting only
+    df_ops_test = build_partner_ops_vector(config.TEST_START_DATE, config.TEST_END_DATE)
+    print(f"\n\nDF OPS built {df_ops_train.shape}\n {df_ops_test.shape}\n\n")
 
     # G — GATEKEEPER
-    df_test, df_ops = run_gates(df_test, df_train, df_ops)
-    if not df_ops.empty:
-        df_ops = compute_operational_score(df_ops)
+    
+    df_test, df_ops_train = run_gates(df_test, df_train, df_ops_train)
+    if not df_ops_train.empty:
+        df_ops_train = compute_operational_score(df_ops_train)
     
     # 3. Geometric Features (New!)
     print("Computing Geometric 'Pattern-of-History' Features...")
@@ -141,18 +149,33 @@ def main(simulate=False):
     ]
 
     # 4. Standard Scoring (Hex + Field + Boundaries)
-    print("Running Production Scoring Engine...")
-    # process() expects: df_source, df_target, df_poly, df_bound
-    # It returns df_target with 'predicted_field_hex', 'parent_color', etc.
-    scored_df = process(
-        df_train,
-        df_test,
-        df_poly,
-        df_bound,
-        lambda_decay=config.LAMBDA_DECAY,
-        max_radius_m=int(config.MIN_DIST_CUTOFF_M),
-    )
+    print("Running Production Scoring Engine (with cache)...")
 
+    if os.path.exists(cache_scored_h5):
+        print("Loading scored df output...")
+        scored_df = pd.read_hdf(cache_scored_h5, "df")
+
+    else:
+        print("Cache not found. Running process()...")
+
+        scored_df = process(
+            df_train,
+            df_test,
+            df_poly,
+            df_bound,
+            lambda_decay=config.LAMBDA_DECAY,
+            max_radius_m=int(config.MIN_DIST_CUTOFF_M),
+        )
+
+        print("Saving cache...")
+        scored_df.to_csv(cache_scored_csv, index=False)
+
+        category_cols = scored_df.select_dtypes(include=["category"]).columns
+        if len(category_cols) > 0:
+            scored_df[category_cols] = scored_df[category_cols].astype(str)
+
+        scored_df.to_hdf(cache_scored_h5, key="df", mode="w")
+    
     if scored_df is None or scored_df.empty:
         print("Scoring returned empty dataframe. Likely parent hex assignment failed.")
         print(
@@ -219,7 +242,7 @@ def main(simulate=False):
     df["gravity_score"] = np.where(
         df["predicted_field_hex"].isna(),
         -99,
-        np.where((df["predicted_field_hex"] > config.FIELD_THRESHOLD) & (df['parent_total']>config.PARENT_TOTAL_THRESHOLD), 2, 
+        np.where((df["predicted_field_hex"] > config.FIELD_THRESHOLD) & (df['total']>config.PARENT_TOTAL_THRESHOLD), 2, 
             np.where(df["predicted_field_hex"] > config.FIELD_THRESHOLD,1,0)
             )
     )
@@ -304,11 +327,11 @@ def main(simulate=False):
     )
     
     # R — COMPOSITE
-    df = compute_composite(df, df_ops)
+    df = compute_composite(df, df_ops_train)
 
     # E — EXPOSURE CHECK
-    if not df_ops.empty and "nmbr_active_leads" in df_ops.columns and "expected_daily_slots" in df_ops.columns:
-        exposure_check = df_ops[["partner_id", "nmbr_active_leads", "expected_daily_slots"]].copy()
+    if not df_ops_train.empty and "nmbr_active_leads" in df_ops_train.columns and "expected_daily_slots" in df_ops_train.columns:
+        exposure_check = df_ops_train[["partner_id", "nmbr_active_leads", "expected_daily_slots"]].copy()
         exposure_check["exposure_ratio"] = (
             exposure_check["nmbr_active_leads"]
             / exposure_check["expected_daily_slots"].replace(0, np.nan)
@@ -316,15 +339,15 @@ def main(simulate=False):
         exposure_check["e_concentrated"] = (
             exposure_check["exposure_ratio"] > sc.EXPOSURE_CONCENTRATION_FACTOR
         ).astype(int)
-        df = df.merge(
-            exposure_check[["partner_id", "exposure_ratio", "e_concentrated"]],
-            on="partner_id", how="left",
-        )
-        df["e_concentrated"] = df["e_concentrated"].fillna(0).astype(int)
-        downgrade_mask = (df["e_concentrated"] == 1) & (df["confidence_tier"] != "DECLINE")
+        # df = df.merge(
+        #     exposure_check[["partner_id", "exposure_ratio", "e_concentrated"]],
+        #     on="partner_id", how="left",
+        # )
+        # df["e_concentrated"] = df["e_concentrated"].fillna(0).astype(int)
+        # downgrade_mask = (df["e_concentrated"] == 1) & (df["confidence_tier"] != "DECLINE")
         tier_downgrade = {"HIGH": "MOD", "MOD": "LOW", "LOW": "DECLINE"}
-        df.loc[downgrade_mask, "confidence_tier"] = df.loc[downgrade_mask, "confidence_tier"].map(tier_downgrade)
-        df["r_serviceable"] = np.where(df["confidence_tier"].isin(["HIGH", "MOD"]), 1, 0)
+        #df.loc[downgrade_mask, "confidence_tier"] = df.loc[downgrade_mask, "confidence_tier"].map(tier_downgrade)
+        #df["r_serviceable"] = np.where(df["confidence_tier"].isin(["HIGH", "MOD"]), 1, 0)
 
     # 5. Evaluation / Bucketing
     print("\n--- RESULTS: SEPARATION ANALYSIS ---")
@@ -467,10 +490,10 @@ def main(simulate=False):
     )
     dist_regime.to_csv(dist_regime_path, index=False)
     # R tier reports
-    tier_dist = df.groupby(["min_dist_bucket", "confidence_tier"], dropna=False).agg(
-        total=("mobile", "count"), installs=("installed_decision", "sum")).reset_index()
-    tier_dist["install_rate"] = tier_dist["installs"] / tier_dist["total"]
-    tier_dist.to_csv(os.path.join(REPORTS_DIR, "install_rate_by_min_dist_bucket_and_confidence_tier.csv"), index=False)
+    # tier_dist = df.groupby(["min_dist_bucket", "confidence_tier"], dropna=False).agg(
+    #     total=("mobile", "count"), installs=("installed_decision", "sum")).reset_index()
+    # tier_dist["install_rate"] = tier_dist["installs"] / tier_dist["total"]
+    # tier_dist.to_csv(os.path.join(REPORTS_DIR, "install_rate_by_min_dist_bucket_and_confidence_tier.csv"), index=False)
 
     if simulate:
         run_declines_simulation(
@@ -491,8 +514,12 @@ def main(simulate=False):
         config_snapshot[field] = getattr(config, field, None)
     df["config_snapshot"] = json.dumps(config_snapshot)
 
-    if not df_ops.empty:
-        df_ops.to_csv(os.path.join(REPORTS_DIR, "partner_ops_vector.csv"), index=False)
+    if not df_ops_train.empty:
+        df_ops_train.to_csv(os.path.join(REPORTS_DIR, "partner_ops_train_vector.csv"), index=False)
+
+    if not df_ops_test.empty:
+        df_ops_test.to_csv(os.path.join(REPORTS_DIR, "partner_ops_test_vector.csv"), index=False)
+
 
     print(f"\nDetailed scores saved to {report_path}")
     print(f"Distance x FS summary saved to {dist_fs_path}")

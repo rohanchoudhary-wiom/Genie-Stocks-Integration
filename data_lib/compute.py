@@ -23,7 +23,6 @@ DEFAULT_LAMBDA = 0.005
 best_w_neg = -2.0
 min_decisions = 250
 
-
 min_samples = 50
 EARTH_RADIUS_M = 6371000  # metres (standard for most geospatial work)
 
@@ -33,7 +32,6 @@ COLOR_NUMERIC_MAP = {
     "crimson": 1,
     "indeterminate": 2,
 }
-
 
 
 def compute_adaptive_gaussian_field(
@@ -121,9 +119,6 @@ def compute_adaptive_gaussian_field(
     df_target["predicted_field"] = predicted
     df_target["kernel_sum"] = kernel_sums
     return df_target
-
-
-
 
 
 def compute_contested_metrics_engine(
@@ -392,15 +387,25 @@ def add_boundary_details_precise(df_target, df_bound, df_source):
     return df_summary
 
 
-def get_parent_hexagon(df_target: pd.DataFrame, df_poly: pd.DataFrame) -> pd.DataFrame:
-    """
-    CHANGED: No longer picks the single hex with highest SE.
-    Keeps ALL covering hex rows, applies indeterminate check per partner,
-    encodes color numerically, shrinks SE, then computes evidence-weighted consensus
-    across all covering hexes per mobile.
+# ==============================================================
+# GET PARENT HEXAGON — mobile-level consensus across all hexes
+# ==============================================================
 
-    Geometric features still come from a single hex picked by max-total (most evidence).
+def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFrame) -> pd.DataFrame:
     """
+    Spatial-joins every target to ALL covering hexagons (not just the best one).
+    Per hex row: adjusts color for indeterminate, shrinks SE, computes geometric
+    features and hop features. Then aggregates everything to mobile level via
+    evidence-weighted consensus.
+
+    Returns a DataFrame at mobile level with:
+      - weighted_se, weighted_se_shrunk, parent_color
+      - median geometric features (dist_to_edge, dist_to_center, near_edge, depth_score)
+      - total-weighted hop features
+      - n_covering_partners, total, installs, declines
+    """
+
+    # ── Hex centroids ──
     df_poly["center_lat"] = pd.to_numeric(
         df_poly["poly"].apply(lambda p: p.centroid.y if p is not None else np.nan),
         errors="coerce",
@@ -410,6 +415,7 @@ def get_parent_hexagon(df_target: pd.DataFrame, df_poly: pd.DataFrame) -> pd.Dat
         errors="coerce",
     )
 
+    # ── Spatial join: targets × all hexes ──
     geometry_points = [Point(lon, lat) for lon, lat in zip(df_target["longitude"], df_target["latitude"])]
     gdf_target = gpd.GeoDataFrame(df_target, geometry=geometry_points, crs="EPSG:4326")
     gdf_hex = gpd.GeoDataFrame(df_poly, geometry="poly", crs="EPSG:4326")
@@ -417,95 +423,145 @@ def get_parent_hexagon(df_target: pd.DataFrame, df_poly: pd.DataFrame) -> pd.Dat
 
     joined = gpd.sjoin(gdf_target, gdf_hex, how="left", predicate="within")
 
+    # ── Geometric features per (mobile, hex) row ──
     joined["dist_to_cluster_center_point_hex"] = haversine_m(
         joined["latitude"], joined["longitude"],
         joined["center_lat"], joined["center_lon"],
     )
 
-    # A.1: Indeterminate check per partner
+    joined_proj = joined.to_crs(7755)
+    poly_keep_proj = gpd.GeoSeries(joined["poly_keep"], crs="EPSG:4326").to_crs(7755)
+
+    joined["dist_to_boundary_edge_point_hex"] = poly_keep_proj.boundary.distance(joined_proj.geometry)
+    joined["dist_to_boundary_edge_point_hex"] = joined["dist_to_boundary_edge_point_hex"].where(
+        joined["poly_keep"].notna(), np.nan
+    )
+    joined["near_edge_point_hex"] = np.where(
+        joined["dist_to_boundary_edge_point_hex"] < 0.7 * joined["dist_to_cluster_center_point_hex"], 1, 0
+    )
+    joined["depth_score_point_hex"] = (
+        joined["dist_to_cluster_center_point_hex"] - joined["dist_to_boundary_edge_point_hex"]
+    )
+
+    # ── Hop features: merge at (partner_id, poly_id) level before aggregation ──
+    print("[HOP FEATURES] Computing 3-hop neighbor SE aggregates...")
+    df_hop = compute_hop_features(df_poly, n_hops=3)
+    print(f"[HOP FEATURES] {len(df_hop)} hex rows with hop features")
+    joined = joined.merge(df_hop, on=["partner_id", "poly_id"], how="left")
+
+    # ── A.1: Indeterminate check per partner ──
     joined["color_adj"] = joined["color"].copy()
     indeterminate_mask = (joined["color"] == "lightgreen") & (
         joined["installs"] <= config.INDETERMINATE_INSTALLS_CUTOFF
     )
     joined.loc[indeterminate_mask, "color_adj"] = "indeterminate"
 
-    # A.2: Encode color numerically
+    # ── A.2: Encode color numerically ──
     joined["color_numeric"] = joined["color_adj"].map(COLOR_NUMERIC_MAP).fillna(0)
 
-    # A.3: Asymmetric credibility weight
-    ratio = np.maximum(config.MIN_SHRINKAGE_RATIO, joined["total"] / (joined["total"] + config.SHRINKAGE_K))
+    # ── A.3: Asymmetric credibility weight (shrink then aggregate) ──
+    ratio = np.maximum(
+        config.MIN_SHRINKAGE_RATIO,
+        joined["total"] / (joined["total"] + config.SHRINKAGE_K),
+    )
     joined["se_shrunk"] = np.where(
         joined["se"] >= 0,
         joined["se"] * ratio,
         joined["se"] / ratio,
     )
 
-    # A.4: Evidence-weighted consensus
+    # ── A.4: Weighted intermediates for consensus ──
     joined["_w_color"] = joined["color_numeric"] * joined["total"]
+    joined["install_shrunk"] = joined["se_shrunk"] * joined["total"]
 
+    # Hop: total-weighted intermediates
+    for h in [1, 2, 3]:
+        joined[f"_w_hop{h}_wmean"] = joined[f"hop{h}_se_wmean"] * joined["total"]
+    joined["_w_gradient"] = joined["se_gradient_1to3"] * joined["total"]
+    joined["_w_confirmed"] = joined["se_confirmed"] * joined["total"]
+    joined["_w_isolation"] = joined["isolation_ratio"] * joined["total"]
+
+    # ── A.5: Mobile-level consensus groupby ──
     consensus = (
-        joined.groupby("mobile")
+        joined.groupby(["mobile", "latitude", "longitude"])
         .agg(
-            parent_se=("se_shrunk", "sum"),
+            # SE / color consensus
+            install_shrunk=("install_shrunk", "sum"),
             _sum_w_color=("_w_color", "sum"),
-            parent_total=("total", "sum"),
-            parent_installs=("installs", "sum"),
-            parent_declines=("declines", "sum"),
+            total=("total", "sum"),
+            installs=("installs", "sum"),
+            declines=("declines", "sum"),
             n_covering_partners=("partner_id", "nunique"),
+            # Geometric: median across covering hexes
+            dist_to_boundary_edge_point_hex=("dist_to_boundary_edge_point_hex", "median"),
+            dist_to_cluster_center_point_hex=("dist_to_cluster_center_point_hex", "median"),
+            near_edge_point_hex=("near_edge_point_hex", "median"),
+            depth_score_point_hex=("depth_score_point_hex", "median"),
+            parent_overlap=("is_overlap", "mean"),
+            # Hop counts: sum
+            hop1_count=("hop1_count", "sum"),
+            hop2_count=("hop2_count", "sum"),
+            hop3_count=("hop3_count", "sum"),
+            # Hop std: worst-case
+            hop1_se_std=("hop1_se_std", "max"),
+            hop2_se_std=("hop2_se_std", "max"),
+            hop3_se_std=("hop3_se_std", "max"),
+            # Hop weighted intermediates
+            _w_hop1=("_w_hop1_wmean", "sum"),
+            _w_hop2=("_w_hop2_wmean", "sum"),
+            _w_hop3=("_w_hop3_wmean", "sum"),
+            _w_gradient=("_w_gradient", "sum"),
+            _w_confirmed=("_w_confirmed", "sum"),
+            _w_isolation=("_w_isolation", "sum"),
         )
         .reset_index()
     )
 
-    consensus["parent_color_numeric"] = (
-        consensus["_sum_w_color"] / consensus["parent_total"].replace(0, np.nan)
+    # ── Derived consensus columns ──
+    total_safe = consensus["total"].replace(0, np.nan)
+
+    consensus["weighted_se"] = np.where(
+        consensus["total"] > 0, consensus["installs"] / consensus["total"], 0
     )
-    consensus.drop(columns=["_sum_w_color"], inplace=True)
+    consensus["weighted_se_shrunk"] = np.where(
+        consensus["total"] > 0, consensus["install_shrunk"] / consensus["total"], 0
+    )
+    consensus["parent_color_numeric"] = consensus["_sum_w_color"] / total_safe
 
     def numeric_to_color(v):
-        if pd.isna(v): return np.nan
-        if v >= 2.5: return "lightgreen"
-        if v >= 1.5: return "orange"
+        if pd.isna(v):
+            return np.nan
+        if v >= 2.5:
+            return "lightgreen"
+        if v >= 1.5:
+            return "orange"
         return "crimson"
 
     consensus["parent_color"] = consensus["parent_color_numeric"].apply(numeric_to_color)
 
-    # Geometric features: pick hex with max total (most evidence)
-    joined_valid = joined.dropna(subset=["partner_id"]).copy()
-    if len(joined_valid) > 0:
-        joined_valid = joined_valid.sort_values(["mobile", "total"], ascending=[True, False])
-        best = joined_valid.drop_duplicates("mobile", keep="first")
-    else:
-        best = joined.drop_duplicates("mobile", keep="first")
+    # Hop SE wmeans: divide weighted sums by total
+    for h in [1, 2, 3]:
+        consensus[f"hop{h}_se_wmean"] = consensus[f"_w_hop{h}"] / total_safe
+    consensus["se_gradient_1to3"] = consensus["_w_gradient"] / total_safe
+    consensus["se_confirmed"] = consensus["_w_confirmed"] / total_safe
+    consensus["isolation_ratio"] = consensus["_w_isolation"] / total_safe
 
-    best = best.to_crs(7755)
-    poly_keep_proj = gpd.GeoSeries(best["poly_keep"], crs="EPSG:4326").to_crs(7755)
-
-    best["dist_to_boundary_edge_point_hex"] = poly_keep_proj.boundary.distance(best.geometry)
-    best["dist_to_boundary_edge_point_hex"] = best["dist_to_boundary_edge_point_hex"].where(
-        best["poly_keep"].notna(), np.nan
-    )
-    best["near_edge_point_hex"] = np.where(
-        best["dist_to_boundary_edge_point_hex"] < 0.7 * best["dist_to_cluster_center_point_hex"], 1, 0
-    )
-    best["depth_score_point_hex"] = (
-        best["dist_to_cluster_center_point_hex"] - best["dist_to_boundary_edge_point_hex"]
+    # Drop all intermediates
+    consensus.drop(
+        columns=[
+            "_sum_w_color",
+            "_w_hop1", "_w_hop2", "_w_hop3",
+            "_w_gradient", "_w_confirmed", "_w_isolation",
+        ],
+        inplace=True,
     )
 
-    cols_to_use = [col for col in params.hex_cols if col in best.columns] + ["mobile"]
-    parent_data = pd.DataFrame(best[cols_to_use])
+    return consensus
 
-    parent_data = parent_data.rename(columns={
-        "partner_id": "partner_id",
-        "poly_id": "poly_id",
-        "is_overlap": "parent_overlap",
-        "distance_from_boundary_m": "parent_hex_dist_to_foreign_m",
-        "distance_to_own_boundary_m": "parent_hex_dist_to_own_m",
-        "rank": "parent_rank",
-    })
-    parent_data = pd.merge(parent_data, consensus, on="mobile", how="left")
 
-    return pd.merge(df_target, parent_data, how="left", on="mobile")
-
+# ==============================================================
+# PROCESS — main pipeline entry point
+# ==============================================================
 
 def process(
     df_source,
@@ -523,77 +579,28 @@ def process(
             df_poly["poly"].apply(lambda p: p.centroid.x if p else np.nan), errors="coerce"
         )
 
+        # ── Boundary features (mobile level) ──
         df_target_boundary = add_boundary_details_precise(df_target, df_bound, df_source)
         df_target_new = pd.merge(df_target, df_target_boundary, how="left", on="mobile")
 
         _df_poly_snapshot = df_poly.copy(deep=True)
 
-        df_target_with_hex = get_parent_hexagon(df_target_new, df_poly)
+        # ── Hex consensus features (mobile level, includes hop features) ──
+        df_hex_consensus = compute_hex_consensus_features(df_target_new, df_poly)
 
-        print("[HOP FEATURES] Computing 3-hop neighbor SE aggregates...")
-        df_hop = compute_hop_features(_df_poly_snapshot, n_hops=3)
-        print(f"[HOP FEATURES] {len(df_hop)} hex rows with hop features")
-
-        df_target_with_hex = df_target_with_hex.merge(
-            df_hop, on=["partner_id", "poly_id"], how="left"
-        )
-        print(f"[HOP FEATURES] Merged. Columns added: {[c for c in df_hop.columns if c not in ('partner_id','poly_id')]}")
-
-        unique_polys_y = (
-            df_target_with_hex.groupby(["partner_id", "poly_id"])["mobile"].nunique().reset_index()
+        # Merge consensus back onto df_target_new to retain boundary columns
+        df_target_with_hex = pd.merge(
+            df_target_new, df_hex_consensus,
+            on=["mobile", "latitude", "longitude"],
+            how="left",
         )
 
-        df_poly_sub_y = pd.merge(df_poly, unique_polys_y, how="inner", on=["partner_id", "poly_id"])
-
-        gdf_poly_parents = gpd.GeoDataFrame(df_poly_sub_y, geometry="poly", crs="EPSG:4326")
-        gdf_poly_parents.rename(columns={"partner_id": "poly_partner_id"}, inplace=True)
-
+        # ── Source points GeoDataFrame (reused by ALL-HEX FIELD) ──
         gdf_source_points = gpd.GeoDataFrame(
             df_source,
             geometry=gpd.points_from_xy(df_source.longitude, df_source.latitude),
             crs="EPSG:4326",
         )
-
-        df_with_parent = df_target_with_hex.dropna(subset=["partner_id", "poly_id"]).copy()
-
-        if len(df_with_parent) == 0:
-            print("No targets have a parent hexagon → predicted_field_hex = NaN")
-            return pd.DataFrame()
-
-        joined_src = gpd.sjoin(gdf_source_points, gdf_poly_parents, how="inner", predicate="within")
-        joined_src = joined_src[joined_src["partner_id"] == joined_src["poly_partner_id"]].copy()
-
-        df_source_in_hex = joined_src.drop(columns=["geometry", "index_right", "poly_partner_id"])
-
-        dup_check = df_source_in_hex.duplicated(subset=df_source_in_hex.index.name, keep=False).sum()
-        if dup_check > 0:
-            raise ValueError(
-                f"Invariant broken: {dup_check // 2} source rows in multiple polys of same partner. Fix hex clustering."
-            )
-
-        results = []
-        hex_groups = df_with_parent.groupby(["partner_id", "poly_id"])
-        for (pid, polyid), target_group in tqdm(hex_groups, total=hex_groups.ngroups, desc="Hexagons processed"):
-            src_local = df_source_in_hex[
-                (df_source_in_hex["partner_id"] == pid) & (df_source_in_hex["poly_id"] == polyid)
-            ]
-            target_group = target_group[["mobile", "latitude", "longitude", "decision_time"]].copy()
-
-            if len(src_local) == 0:
-                target_group["predicted_field_hex"] = np.nan
-            else:
-                field_df = compute_adaptive_gaussian_field(
-                    df_target=target_group,
-                    df_source=src_local,
-                    lambda_decay=lambda_decay,
-                    max_radius_m=max_radius_m,
-                    verbose=False,
-                )
-                target_group["predicted_field_hex"] = field_df["predicted_field"]
-
-            results.append(target_group[["mobile", "predicted_field_hex"]])
-
-        hex_results = pd.concat(results, ignore_index=True)
 
         # ==============================================================
         # COMBINED FIELD ACROSS ALL OVERLAPPING PARTNER HEXAGONS
@@ -602,10 +609,6 @@ def process(
 
         try:
             print("[ALL-HEX FIELD] Starting combined field computation across all overlapping hexagons...")
-            print(f"[ALL-HEX FIELD] _df_poly_snapshot columns: {_df_poly_snapshot.columns.tolist()}")
-            print(f"[ALL-HEX FIELD] _df_poly_snapshot shape: {_df_poly_snapshot.shape}")
-            print(f"[ALL-HEX FIELD] 'partner_id' in snapshot: {'partner_id' in _df_poly_snapshot.columns}")
-            print(f"[ALL-HEX FIELD] 'poly' in snapshot: {'poly' in _df_poly_snapshot.columns}")
 
             _df_poly_copy = _df_poly_snapshot.copy()
             _df_poly_copy.rename(columns={"partner_id": "all_poly_partner_id"}, inplace=True)
@@ -624,13 +627,31 @@ def process(
             if len(all_joined) == 0:
                 raise ValueError("Empty sjoin — skipping all-hex field")
 
-            _df_poly_copy_src = _df_poly_snapshot.copy()
+            # Filter source polys to only those with targets (perf optimisation)
+            unique_polys = (
+                all_joined.groupby(["all_poly_partner_id", "poly_id"])["mobile"]
+                .nunique()
+                .reset_index()
+            )
+            # Rename back so merge keys align with _df_poly_snapshot
+            unique_polys.rename(columns={"all_poly_partner_id": "partner_id"}, inplace=True)
+
+            _df_poly_copy_src = pd.merge(
+                _df_poly_snapshot,
+                unique_polys[["partner_id", "poly_id"]],
+                how="inner",
+                on=["partner_id", "poly_id"],
+            )
             _df_poly_copy_src.rename(columns={"partner_id": "all_poly_partner_id"}, inplace=True)
 
-            gdf_all_polys_for_src = gpd.GeoDataFrame(_df_poly_copy_src, geometry="poly", crs="EPSG:4326")
+            gdf_all_polys_for_src = gpd.GeoDataFrame(
+                _df_poly_copy_src, geometry="poly", crs="EPSG:4326"
+            )
 
-            all_joined_src = gpd.sjoin(gdf_source_points, gdf_all_polys_for_src, how="inner", predicate="within")
-            print(f"[ALL-HEX FIELD] Sources × all hexagons sjoin: {len(all_joined_src)} rows")
+            all_joined_src = gpd.sjoin(
+                gdf_source_points, gdf_all_polys_for_src, how="inner", predicate="within"
+            )
+            print(f"[ALL-HEX FIELD] Sources × filtered hexagons sjoin: {len(all_joined_src)} rows")
 
             all_joined_src = all_joined_src[
                 all_joined_src["partner_id"] == all_joined_src["all_poly_partner_id"]
@@ -641,11 +662,14 @@ def process(
                 columns=["geometry", "index_right", "all_poly_partner_id"], errors="ignore"
             )
 
+            # ── Per-hex field computation ──
             all_hex_results = []
             all_hex_groups = all_joined.groupby(["all_poly_partner_id", "poly_id"])
             print(f"[ALL-HEX FIELD] Processing {all_hex_groups.ngroups} hex groups...")
 
-            for (pid, polyid), tgt_grp in tqdm(all_hex_groups, total=all_hex_groups.ngroups, desc="All-hex combined field"):
+            for (pid, polyid), tgt_grp in tqdm(
+                all_hex_groups, total=all_hex_groups.ngroups, desc="All-hex combined field"
+            ):
                 src_local = df_all_source_in_hex[
                     (df_all_source_in_hex["partner_id"] == pid)
                     & (df_all_source_in_hex["poly_id"] == polyid)
@@ -674,6 +698,7 @@ def process(
                     tgt_sub[["mobile", "_hex_partner", "_hex_poly", "_field_all", "_n_sources", "_kernel_sum"]]
                 )
 
+            # ── Aggregate per-hex fields to mobile level ──
             if all_hex_results:
                 df_all_hex = pd.concat(all_hex_results, ignore_index=True)
                 print(f"[ALL-HEX FIELD] Concatenated {len(df_all_hex)} field rows across all hexes")
@@ -698,10 +723,12 @@ def process(
                 )
 
                 agg_all_hex["predicted_field_hex_all_wmean"] = (
-                    agg_all_hex["_sum_weighted_field"] / agg_all_hex["_sum_sources"].replace(0, np.nan)
+                    agg_all_hex["_sum_weighted_field"]
+                    / agg_all_hex["_sum_sources"].replace(0, np.nan)
                 )
                 agg_all_hex["predicted_field_hex_all_kswmean"] = (
-                    agg_all_hex["_sum_ks_weighted_field"] / agg_all_hex["_sum_kernel_sums"].replace(0, np.nan)
+                    agg_all_hex["_sum_ks_weighted_field"]
+                    / agg_all_hex["_sum_kernel_sums"].replace(0, np.nan)
                 )
 
                 unweighted = (
@@ -728,7 +755,8 @@ def process(
             traceback.print_exc()
             agg_all_hex = None
 
-        df_target_final = pd.merge(df_target_with_hex, hex_results, on="mobile", how="left")
+        # ── Final assembly ──
+        df_target_final = df_target_with_hex
 
         if agg_all_hex is not None and len(agg_all_hex) > 0:
             df_target_final = pd.merge(df_target_final, agg_all_hex, on="mobile", how="left")
@@ -742,8 +770,16 @@ def process(
                 df_target_final[col] = np.nan
             print("[ALL-HEX FIELD] Columns added as NaN (computation failed or empty)")
 
+        # Alias for backward compatibility with downstream scoring
+        df_target_final["predicted_field_hex"] = df_target_final.get(
+            "predicted_field_hex_all_kswmean", np.nan
+        )
+        # Alias: downstream expects parent_installs
+        df_target_final["parent_installs"] = df_target_final.get("installs", np.nan)
+
         return df_target_final
 
     except Exception as e:
         print(f"ERROR IN PROCESSING OF HEXAGONS AND BOUNDARIES: {e}")
         return pd.DataFrame()
+    
