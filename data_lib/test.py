@@ -5,7 +5,8 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from shapely.strtree import STRtree
-
+from data_lib.params import overlap_columns
+from data_lib.config import TEMPORAL_WINDOWS
 
 def get_overlap(search_radius_deg: float = 0.027):
     print("Loading data...")
@@ -93,7 +94,7 @@ def get_overlap(search_radius_deg: float = 0.027):
     for col in df_hex.select_dtypes(include="string").columns:
         df_hex[col] = df_hex[col].astype("object")
     df_hex.to_hdf(
-        "poly_stats_updated.h5", key="df", mode="w", complevel=9, complib="blosc"
+        "artifacts/poly_stats_updated.h5", key="df", mode="w", complevel=9, complib="blosc"
     )
     print(f"Distance computation complete:")
     print(f"   → {df_hex['is_overlap'].sum():,} hexes overlap foreign territory")
@@ -144,28 +145,19 @@ def get_overlap(search_radius_deg: float = 0.027):
     df_final = df_final.loc[:, ~df_final.columns.str.endswith("_dup")]
 
     # Final column order
-    final_columns = [
-        "partner_id",
-        "poly_id",
-        "best_size",
-        "poly",
-        "se",
-        "installs",
-        "declines",
-        "total",
-        "color",
-        "is_overlap",
-        "distance_from_boundary_m",
-        "distance_to_own_boundary_m",
-        "rank",
-    ]
+    # NEW:
+    temporal_cols = ["install_velocity"]
+    for wd in TEMPORAL_WINDOWS:
+        temporal_cols += [f"se_{wd}d", f"installs_{wd}d", f"declines_{wd}d", f"total_{wd}d"]
+
+    final_columns = overlap_columns + temporal_cols
     df_final = df_final[[c for c in final_columns if c in df_final.columns]]
 
     # Save
     for col in df_final.select_dtypes(include="string").columns:
         df_final[col] = df_final[col].astype("object")
     df_final.to_hdf(
-        "poly_stats_final.h5", key="df", mode="w", complevel=9, complib="blosc"
+        "artifacts/poly_stats_final.h5", key="df", mode="w", complevel=9, complib="blosc"
     )
 
     return df_final

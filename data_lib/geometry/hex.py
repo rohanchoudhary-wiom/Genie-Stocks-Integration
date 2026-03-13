@@ -7,7 +7,7 @@ import os
 from math import radians, cos, sin, sqrt
 from shapely import contains_xy
 from data_lib import config
-
+import numpy as np
 
 def create_hex_grid(center_lat, center_lon, radius_km=3.0, hex_size_km=0.25):
     """
@@ -149,15 +149,19 @@ def compute_hexes(
     bad_se,
     mid_se,
     best_size,
-    METERS_PER_DEG_LAT,
-    cos_lat,
     pid,
+    reference_date=None,
 ):
     hex_stats = []
     src_lats = sources["latitude"].values
     src_lons = sources["longitude"].values
 
     poly_id = 0
+    # ── Pre-compute temporal cutoffs ──
+    has_temporal = reference_date is not None and "decision_time" in sources.columns
+    if has_temporal:
+        ref_ts = pd.Timestamp(reference_date)
+        cutoffs = {wd: ref_ts - pd.Timedelta(days=wd) for wd in config.TEMPORAL_WINDOWS}
 
     for hex_poly in hexes:
         # Fast vectorised containment
@@ -184,19 +188,46 @@ def compute_hexes(
         # Store everything
         # ------------------------------------------------------------------
         poly_id += 1
-        hex_stats.append(
-            {
-                "partner_id": pid,
-                "best_size": best_size,
-                "poly_id": poly_id,
-                "poly": hex_poly,
-                "se": round(se, 4),
-                "installs": int(installs),
-                "declines": int(declines),
-                "total": int(total),
-                "color": color,
-            }
-        )
+
+        # NEW:
+        row = {
+            "partner_id": pid,
+            "best_size": best_size,
+            "poly_id": poly_id,
+            "poly": hex_poly,
+            "se": round(se, 4),
+            "installs": int(installs),
+            "declines": int(declines),
+            "total": int(total),
+            "color": color,
+        }
+
+        if has_temporal:
+            dt_col = hex_src["decision_time"]
+            is_inst = hex_src["is_installed"] == 1
+            is_decl = hex_src["is_declined"] == 1
+            for wd in config.TEMPORAL_WINDOWS:
+                wmask = dt_col >= cutoffs[wd]
+                w_inst = int(is_inst[wmask].sum())
+                w_decl = int(is_decl[wmask].sum())
+                w_tot = int(wmask.sum())
+                w_se = round(w_inst / w_tot, 4) if w_tot > 0 else np.nan
+                row[f"se_{wd}d"] = w_se
+                row[f"installs_{wd}d"] = w_inst
+                row[f"declines_{wd}d"] = w_decl
+                row[f"total_{wd}d"] = w_tot
+            row["install_velocity"] = round(
+                row[f"installs_{config.TEMPORAL_WINDOWS[0]}d"] / max(row[f"installs_{config.TEMPORAL_WINDOWS[-1]}d"], 1), 4
+            )
+        else:
+            for wd in config.TEMPORAL_WINDOWS:
+                row[f"se_{wd}d"] = np.nan
+                row[f"installs_{wd}d"] = np.nan
+                row[f"declines_{wd}d"] = np.nan
+                row[f"total_{wd}d"] = np.nan
+            row["install_velocity"] = np.nan
+
+        hex_stats.append(row)
 
     # ------------------------------------------------------------------
     # Map generation (only if we have hexes)

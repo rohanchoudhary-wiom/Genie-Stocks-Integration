@@ -34,10 +34,6 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
             "spread_m": 0.0,
         }
 
-    # Convert to local meters (approximate projection centered on lead)
-    # x = (lon - lead_lon) * 111320 * cos(lat)
-    # y = (lat - lead_lat) * 111320
-
     lat0_rad = np.radians(lead_lat)
     meters_per_deg_lat = config.METERS_PER_DEG_LAT
     meters_per_deg_lon = meters_per_deg_lat * np.cos(lat0_rad)
@@ -47,7 +43,6 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
     coords_m[:, 1] = (neighbor_df["latitude"] - lead_lat) * meters_per_deg_lat  # y
 
     # 1. Covariance & Eigenvalues (Anisotropy)
-    # Centered on the geometric center of the neighbors, not necessarily the lead
     center_m = np.mean(coords_m, axis=0)
     centered_coords = coords_m - center_m
 
@@ -55,8 +50,6 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
     eig_vals = np.linalg.eigvals(cov_matrix)
     eig_vals = np.sort(eig_vals)[::-1]  # Descending
 
-    # Anisotropy: 1 - (lambda2 / lambda1).
-    # Close to 1 = Line/Gully. Close to 0 = Blob/Round.
     if eig_vals[0] > 0:
         anisotropy = 1.0 - (eig_vals[1] / eig_vals[0])
     else:
@@ -66,7 +59,6 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
     try:
         hull = ConvexHull(coords_m)
         hull_area = hull.volume  # In 2D, volume is area
-        # Points per sq meter * 1000 (scaled for readability)
         density = (len(neighbor_df) / hull_area) * 1000 if hull_area > 1 else 0
     except:
         hull_area = 0.0
@@ -86,7 +78,7 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
         "local_anisotropy": round(anisotropy, 3),
         "local_density": round(density, 3),
         "hull_area": round(hull_area, 1),
-        "linearity_score": round(linearity, 1),  # Ratio
+        "linearity_score": round(linearity, 1),
         "spread_m": round(spread, 1),
         "dense_score": round(dense_score, 4),
         "gully_score": round(gully_score, 4),
@@ -94,18 +86,38 @@ def compute_local_geometry(lead_lat, lead_lon, neighbor_df, radius_m=250):
     }
 
 
-def batch_compute_geometry(df_leads, df_history, radius_m=250):
+# Keys we extract for temporal variants (subset of full geometry output)
+_TEMPORAL_GEOM_KEYS = [
+    "local_anisotropy", "local_density", "hull_area", "spread_m",
+    "dense_score", "gully_score", "sparse_score",
+]
+
+
+def batch_compute_geometry(df_leads, df_history, radius_m=250, reference_date=None):
     """
     Batched wrapper for computing geometry for many leads.
     Uses BallTree for efficiency.
+
+    If reference_date is provided and df_history has decision_time,
+    also computes temporal geometry for each window in TEMPORAL_WINDOWS.
+
+    ALL-TIME columns produced:
+        local_anisotropy, local_density, hull_area, linearity_score, spread_m,
+        dense_score, gully_score, sparse_score
+
+    TEMPORAL columns produced (per window wd in TEMPORAL_WINDOWS):
+        local_anisotropy_{wd}d, local_density_{wd}d, hull_area_{wd}d,
+        spread_m_{wd}d, dense_score_{wd}d, gully_score_{wd}d, sparse_score_{wd}d
     """
     from sklearn.neighbors import BallTree
 
-    # Build tree on history
+    # ══════════════════════════════════════════════════════════════
+    # ALL-TIME GEOMETRY
+    # ══════════════════════════════════════════════════════════════
+
     hist_rad = np.radians(df_history[["latitude", "longitude"]].values)
     tree = BallTree(hist_rad, metric="haversine")
 
-    # Query leads
     leads_rad = np.radians(df_leads[["latitude", "longitude"]].values)
     radius_rad = radius_m / 6371000.0
 
@@ -125,15 +137,61 @@ def batch_compute_geometry(df_leads, df_history, radius_m=250):
             )
             continue
 
-        # Get neighbors for this lead
         neighbors = df_history.iloc[indices]
-
-        # Compute metrics
         lead_lat = df_leads.iloc[i]["latitude"]
         lead_lon = df_leads.iloc[i]["longitude"]
 
         metrics = compute_local_geometry(lead_lat, lead_lon, neighbors, radius_m)
         results.append(metrics)
+
+    # ══════════════════════════════════════════════════════════════
+    # TEMPORAL GEOMETRY
+    # ══════════════════════════════════════════════════════════════
+
+    has_temporal = (
+        reference_date is not None
+        and "decision_time" in df_history.columns
+    )
+
+    if has_temporal:
+        ref_ts = pd.Timestamp(reference_date)
+        print(f"[GEOMETRY] Computing temporal geometry for windows: {config.TEMPORAL_WINDOWS}")
+
+        for wd in config.TEMPORAL_WINDOWS:
+            cutoff = ref_ts - pd.Timedelta(days=wd)
+            hist_w = df_history[df_history["decision_time"] >= cutoff]
+
+            if len(hist_w) < 3:
+                # Not enough recent history — fill NaN for all leads
+                for i in range(len(results)):
+                    for k in _TEMPORAL_GEOM_KEYS:
+                        results[i][f"{k}_{wd}d"] = np.nan
+                print(f"[GEOMETRY]   {wd}d: only {len(hist_w)} points, all NaN")
+                continue
+
+            hist_w_rad = np.radians(hist_w[["latitude", "longitude"]].values)
+            tree_w = BallTree(hist_w_rad, metric="haversine")
+            idx_w = tree_w.query_radius(leads_rad, r=radius_rad)
+
+            n_valid = 0
+            for i, indices in enumerate(idx_w):
+                if len(indices) < 3:
+                    for k in _TEMPORAL_GEOM_KEYS:
+                        results[i][f"{k}_{wd}d"] = np.nan
+                    continue
+
+                neighbors = hist_w.iloc[indices]
+                m_w = compute_local_geometry(
+                    df_leads.iloc[i]["latitude"],
+                    df_leads.iloc[i]["longitude"],
+                    neighbors,
+                    radius_m,
+                )
+                for k in _TEMPORAL_GEOM_KEYS:
+                    results[i][f"{k}_{wd}d"] = m_w.get(k, np.nan)
+                n_valid += 1
+
+            print(f"[GEOMETRY]   {wd}d: {n_valid}/{len(results)} leads with valid geometry")
 
     return pd.DataFrame(results)
 
@@ -152,21 +210,14 @@ def calculate_adaptive_h(df_train: pd.DataFrame) -> pd.DataFrame:
     if df_train.empty:
         return df_train
 
-    # Work on a copy to avoid side effects
     df_train = df_train.copy()
 
-    # 1. Deduplicate to unique mobile level
-    # We take the 'best' case scenario for a location: max field weight (Install > Decline)
-    # and the earliest time it was seen.
     unique_pts = df_train.groupby(
         ["mobile", "latitude", "longitude"], as_index=False
     ).agg({"decision_time": "min", "field_weight": "max"})
 
-    # Initialize adaptive_h column in unique set
     unique_pts["adaptive_h"] = np.nan
 
-    # 2. Compute H for unique points
-    # Process for both positive (Installs) and negative (Declines) cohorts
     for subset_mask, subset_name in [
         (unique_pts["field_weight"] >= 0, "install"),
         (unique_pts["field_weight"] < 0, "decline"),
@@ -176,49 +227,33 @@ def calculate_adaptive_h(df_train: pd.DataFrame) -> pd.DataFrame:
 
         subset_df = unique_pts[subset_mask]
 
-        # Need enough points to find k neighbors
-        # We need k+1 points because the query includes the point itself as the 0-th neighbor
         target_k = config.ADAPTIVE_H_NEIGHBOR_K
         query_k = target_k + 1
 
         if len(subset_df) < query_k:
-            # Not enough neighbors, leave as NaN (will use default later if merged, or keep existing)
             continue
 
         coords = np.radians(subset_df[["latitude", "longitude"]].values)
         tree = BallTree(coords, metric="haversine")
 
-        # query returns distances to k nearest neighbors
-        # column 0 is self (dist~0), column 1 is 1st NN, ..., column k is k-th NN
         dist, _ = tree.query(coords, k=query_k)
 
-        # Get distance to the target neighbor
         neighbor_dist_rad = dist[:, target_k]
-        neighbor_dist_m = neighbor_dist_rad * 6371000  # Earth radius in meters
+        neighbor_dist_m = neighbor_dist_rad * config.EARTH_RADIUS_METER
 
-        # Clip to safe bounds to avoid spikes or overly broad fields
         neighbor_dist_m = np.clip(
             neighbor_dist_m, config.ADAPTIVE_H_MIN, config.ADAPTIVE_H_MAX
         )
 
         unique_pts.loc[subset_mask, "adaptive_h"] = neighbor_dist_m
 
-    # 3. Merge back to original dataframe
-    # We map the computed 'adaptive_h' back to the main df based on the full spatial key.
-    # This handles cases where one mobile appears at multiple distinct locations.
-
-    # Select only the columns we need to merge
     merge_cols = ["mobile", "latitude", "longitude", "adaptive_h"]
 
-    # Left merge to attach adaptive_h where calculated
     df_merged = df_train.merge(
         unique_pts[merge_cols], on=["mobile", "latitude", "longitude"], how="left"
     )
 
-    # Update 'h' column: use adaptive_h if present, otherwise keep existing default
     df_merged["h"] = df_merged["adaptive_h"].fillna(df_merged["h"])
-
-    # Drop the temporary column
     df_merged = df_merged.drop(columns=["adaptive_h"])
 
     return df_merged

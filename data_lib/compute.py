@@ -128,6 +128,7 @@ def compute_contested_metrics_engine(
 ) -> pd.DataFrame:
     """
     Computes contested overlap geometry (cached) + per-mobile field.
+    Now includes temporal contested SE for each window in TEMPORAL_WINDOWS.
 
     REQUIRED COLUMNS
     ----------------
@@ -137,7 +138,7 @@ def compute_contested_metrics_engine(
 
     RETURNS
     -------
-    DataFrame indexed by mobile with contested metrics.
+    DataFrame indexed by mobile with contested metrics + temporal variants.
     """
     sidx = gdf_source_4326.sindex
 
@@ -165,6 +166,11 @@ def compute_contested_metrics_engine(
             "contested_se": np.nan,
             "contested_field": np.nan,
         }
+        # Init temporal contested keys
+        for wd in config.TEMPORAL_WINDOWS:
+            base[f"contested_installs_{wd}d"] = np.nan
+            base[f"contested_total_{wd}d"] = np.nan
+            base[f"contested_se_{wd}d"] = np.nan
 
         if len(polys) == 0:
             results.append(base)
@@ -240,6 +246,20 @@ def compute_contested_metrics_engine(
                 "contested_se": round(se, 4) if not np.isnan(se) else np.nan,
             }
         )
+
+        # ── TEMPORAL CONTESTED STATS ──
+        if n_total > 0 and "decision_time" in inside.columns:
+            inside_dt = pd.to_datetime(inside["decision_time"])
+            for wd in config.TEMPORAL_WINDOWS:
+                cutoff = t0 - pd.Timedelta(days=wd)
+                wmask = inside_dt >= cutoff
+
+                w_n_m = inside[wmask]['mobile'].nunique()
+                w_inst = int(inside.loc[wmask, "installed_decision"].sum()) if w_n_m > 0 else 0
+                w_se = round(w_inst / w_n_m, 4) if w_n_m > 0 else np.nan
+                base[f"contested_installs_{wd}d"] = w_inst
+                base[f"contested_total_{wd}d"] = w_n_m
+                base[f"contested_se_{wd}d"] = w_se
 
         if n_total > 0:
             lat = inside["latitude"].to_numpy()
@@ -398,12 +418,13 @@ def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFram
     features and hop features. Then aggregates everything to mobile level via
     evidence-weighted consensus.
 
-    Returns a DataFrame at mobile level with:
-      - weighted_se, weighted_se_shrunk, parent_color
-      - median geometric features (dist_to_edge, dist_to_center, near_edge, depth_score)
-      - total-weighted hop features
-      - n_covering_partners, total, installs, declines
+    Now includes temporal SE (30d/60d/365d) shrinkage + consensus,
+    and temporal hop features consensus.
     """
+
+    # ── Detect available temporal windows ──
+    available_windows = [wd for wd in config.TEMPORAL_WINDOWS if f"se_{wd}d" in df_poly.columns]
+    print(f"[HEX CONSENSUS] Temporal windows available: {available_windows}")
 
     # ── Hex centroids ──
     df_poly["center_lat"] = pd.to_numeric(
@@ -444,7 +465,7 @@ def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFram
     )
 
     # ── Hop features: merge at (partner_id, poly_id) level before aggregation ──
-    print("[HOP FEATURES] Computing 3-hop neighbor SE aggregates...")
+    print("[HOP FEATURES] Computing 3-hop neighbor SE aggregates (+ temporal)...")
     df_hop = compute_hop_features(df_poly, n_hops=3)
     print(f"[HOP FEATURES] {len(df_hop)} hex rows with hop features")
     joined = joined.merge(df_hop, on=["partner_id", "poly_id"], how="left")
@@ -459,7 +480,7 @@ def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFram
     # ── A.2: Encode color numerically ──
     joined["color_numeric"] = joined["color_adj"].map(COLOR_NUMERIC_MAP).fillna(0)
 
-    # ── A.3: Asymmetric credibility weight (shrink then aggregate) ──
+    # ── A.3: Asymmetric credibility weight — ALL-TIME (shrink then aggregate) ──
     ratio = np.maximum(
         config.MIN_SHRINKAGE_RATIO,
         joined["total"] / (joined["total"] + config.SHRINKAGE_K),
@@ -470,54 +491,122 @@ def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFram
         joined["se"] / ratio,
     )
 
-    # ── A.4: Weighted intermediates for consensus ──
+    # ── A.3b: Asymmetric credibility weight — TEMPORAL ──
+    for wd in available_windows:
+        se_col = f"se_{wd}d"
+        tot_col = f"total_{wd}d"
+        if se_col in joined.columns and tot_col in joined.columns:
+            ratio_t = np.maximum(
+                config.MIN_SHRINKAGE_RATIO,
+                joined[tot_col].fillna(0) / (joined[tot_col].fillna(0) + config.SHRINKAGE_K),
+            )
+            joined[f"se_{wd}d_shrunk"] = np.where(
+                joined[se_col].fillna(0) >= 0,
+                joined[se_col].fillna(0) * ratio_t,
+                joined[se_col].fillna(0) / ratio_t,
+            )
+
+    # ── A.4: Weighted intermediates for consensus — ALL-TIME ──
     joined["_w_color"] = joined["color_numeric"] * joined["total"]
     joined["install_shrunk"] = joined["se_shrunk"] * joined["total"]
 
-    # Hop: total-weighted intermediates
+    # Hop all-time: total-weighted intermediates
     for h in [1, 2, 3]:
         joined[f"_w_hop{h}_wmean"] = joined[f"hop{h}_se_wmean"] * joined["total"]
     joined["_w_gradient"] = joined["se_gradient_1to3"] * joined["total"]
     joined["_w_confirmed"] = joined["se_confirmed"] * joined["total"]
     joined["_w_isolation"] = joined["isolation_ratio"] * joined["total"]
 
+    # ── A.4b: Weighted intermediates — TEMPORAL SE ──
+    for wd in available_windows:
+        tot_col = f"total_{wd}d"
+        shrunk_col = f"se_{wd}d_shrunk"
+        inst_col = f"installs_{wd}d"
+        if shrunk_col in joined.columns and tot_col in joined.columns:
+            joined[f"_w_se_{wd}d_shrunk"] = joined[shrunk_col] * joined[tot_col].fillna(0)
+
+    # ── A.4c: Weighted intermediates — TEMPORAL HOP ──
+    for wd in available_windows:
+        for h in [1, 2, 3]:
+            col = f"hop{h}_se_{wd}d_wmean"
+            if col in joined.columns:
+                joined[f"_w_hop{h}_se_{wd}d"] = joined[col] * joined["total"]
+        gcol = f"se_gradient_1to3_{wd}d"
+        ccol = f"se_confirmed_{wd}d"
+        if gcol in joined.columns:
+            joined[f"_w_gradient_{wd}d"] = joined[gcol] * joined["total"]
+        if ccol in joined.columns:
+            joined[f"_w_confirmed_{wd}d"] = joined[ccol] * joined["total"]
+
     # ── A.5: Mobile-level consensus groupby ──
+    # Build agg dict dynamically to handle optional temporal columns
+    agg_dict = {
+        # SE / color consensus — all-time
+        "install_shrunk": ("install_shrunk", "sum"),
+        "_sum_w_color": ("_w_color", "sum"),
+        "total": ("total", "sum"),
+        "installs": ("installs", "sum"),
+        "declines": ("declines", "sum"),
+        "n_covering_partners": ("partner_id", "nunique"),
+        # Geometric: median across covering hexes
+        "dist_to_boundary_edge_point_hex": ("dist_to_boundary_edge_point_hex", "median"),
+        "dist_to_cluster_center_point_hex": ("dist_to_cluster_center_point_hex", "median"),
+        "near_edge_point_hex": ("near_edge_point_hex", "median"),
+        "depth_score_point_hex": ("depth_score_point_hex", "median"),
+        "parent_overlap": ("is_overlap", "mean"),
+        "install_velocity": ("install_velocity", "mean"),
+        # Hop counts: sum — all-time
+        "hop1_count": ("hop1_count", "sum"),
+        "hop2_count": ("hop2_count", "sum"),
+        "hop3_count": ("hop3_count", "sum"),
+        # Hop std: worst-case — all-time
+        "hop1_se_std": ("hop1_se_std", "max"),
+        "hop2_se_std": ("hop2_se_std", "max"),
+        "hop3_se_std": ("hop3_se_std", "max"),
+        # Hop weighted intermediates — all-time
+        "_w_hop1": ("_w_hop1_wmean", "sum"),
+        "_w_hop2": ("_w_hop2_wmean", "sum"),
+        "_w_hop3": ("_w_hop3_wmean", "sum"),
+        "_w_gradient": ("_w_gradient", "sum"),
+        "_w_confirmed": ("_w_confirmed", "sum"),
+        "_w_isolation": ("_w_isolation", "sum"),
+    }
+
+    # Temporal SE aggregations
+    for wd in available_windows:
+        inst_col = f"installs_{wd}d"
+        dec_col = f"declines_{wd}d"
+        tot_col = f"total_{wd}d"
+        w_shrunk_col = f"_w_se_{wd}d_shrunk"
+        if inst_col in joined.columns:
+            agg_dict[inst_col] = (inst_col, "sum")
+        if dec_col in joined.columns:
+            agg_dict[dec_col] = (dec_col, "sum")
+        if tot_col in joined.columns:
+            agg_dict[tot_col] = (tot_col, "sum")
+        if w_shrunk_col in joined.columns:
+            agg_dict[w_shrunk_col] = (w_shrunk_col, "sum")
+
+    # Temporal hop aggregations
+    for wd in available_windows:
+        for h in [1, 2, 3]:
+            wcol = f"_w_hop{h}_se_{wd}d"
+            if wcol in joined.columns:
+                agg_dict[wcol] = (wcol, "sum")
+        gcol = f"_w_gradient_{wd}d"
+        ccol = f"_w_confirmed_{wd}d"
+        if gcol in joined.columns:
+            agg_dict[gcol] = (gcol, "sum")
+        if ccol in joined.columns:
+            agg_dict[ccol] = (ccol, "sum")
+
     consensus = (
         joined.groupby(["mobile", "latitude", "longitude"])
-        .agg(
-            # SE / color consensus
-            install_shrunk=("install_shrunk", "sum"),
-            _sum_w_color=("_w_color", "sum"),
-            total=("total", "sum"),
-            installs=("installs", "sum"),
-            declines=("declines", "sum"),
-            n_covering_partners=("partner_id", "nunique"),
-            # Geometric: median across covering hexes
-            dist_to_boundary_edge_point_hex=("dist_to_boundary_edge_point_hex", "median"),
-            dist_to_cluster_center_point_hex=("dist_to_cluster_center_point_hex", "median"),
-            near_edge_point_hex=("near_edge_point_hex", "median"),
-            depth_score_point_hex=("depth_score_point_hex", "median"),
-            parent_overlap=("is_overlap", "mean"),
-            # Hop counts: sum
-            hop1_count=("hop1_count", "sum"),
-            hop2_count=("hop2_count", "sum"),
-            hop3_count=("hop3_count", "sum"),
-            # Hop std: worst-case
-            hop1_se_std=("hop1_se_std", "max"),
-            hop2_se_std=("hop2_se_std", "max"),
-            hop3_se_std=("hop3_se_std", "max"),
-            # Hop weighted intermediates
-            _w_hop1=("_w_hop1_wmean", "sum"),
-            _w_hop2=("_w_hop2_wmean", "sum"),
-            _w_hop3=("_w_hop3_wmean", "sum"),
-            _w_gradient=("_w_gradient", "sum"),
-            _w_confirmed=("_w_confirmed", "sum"),
-            _w_isolation=("_w_isolation", "sum"),
-        )
+        .agg(**agg_dict)
         .reset_index()
     )
 
-    # ── Derived consensus columns ──
+    # ── Derived consensus columns — ALL-TIME ──
     total_safe = consensus["total"].replace(0, np.nan)
 
     consensus["weighted_se"] = np.where(
@@ -539,22 +628,67 @@ def compute_hex_consensus_features(df_target: pd.DataFrame, df_poly: pd.DataFram
 
     consensus["parent_color"] = consensus["parent_color_numeric"].apply(numeric_to_color)
 
-    # Hop SE wmeans: divide weighted sums by total
+    # Hop SE wmeans: divide weighted sums by total — all-time
     for h in [1, 2, 3]:
         consensus[f"hop{h}_se_wmean"] = consensus[f"_w_hop{h}"] / total_safe
     consensus["se_gradient_1to3"] = consensus["_w_gradient"] / total_safe
     consensus["se_confirmed"] = consensus["_w_confirmed"] / total_safe
     consensus["isolation_ratio"] = consensus["_w_isolation"] / total_safe
 
-    # Drop all intermediates
-    consensus.drop(
-        columns=[
-            "_sum_w_color",
-            "_w_hop1", "_w_hop2", "_w_hop3",
-            "_w_gradient", "_w_confirmed", "_w_isolation",
-        ],
-        inplace=True,
-    )
+    # ── Derived consensus columns — TEMPORAL SE ──
+    for wd in available_windows:
+        tot_col = f"total_{wd}d"
+        inst_col = f"installs_{wd}d"
+        w_shrunk_col = f"_w_se_{wd}d_shrunk"
+
+        if tot_col in consensus.columns:
+            safe_t = consensus[tot_col].replace(0, np.nan)
+
+            # Raw temporal SE
+            if inst_col in consensus.columns:
+                consensus[f"weighted_se_{wd}d"] = np.where(
+                    consensus[tot_col] > 0,
+                    consensus[inst_col] / consensus[tot_col],
+                    np.nan,
+                )
+
+            # Shrunk temporal SE
+            if w_shrunk_col in consensus.columns:
+                consensus[f"weighted_se_{wd}d_shrunk"] = consensus[w_shrunk_col] / safe_t
+
+    # ── Derived consensus columns — TEMPORAL HOP ──
+    for wd in available_windows:
+        for h in [1, 2, 3]:
+            wcol = f"_w_hop{h}_se_{wd}d"
+            if wcol in consensus.columns:
+                consensus[f"hop{h}_se_{wd}d_wmean"] = consensus[wcol] / total_safe
+        gcol = f"_w_gradient_{wd}d"
+        ccol = f"_w_confirmed_{wd}d"
+        if gcol in consensus.columns:
+            consensus[f"se_gradient_1to3_{wd}d"] = consensus[gcol] / total_safe
+        if ccol in consensus.columns:
+            consensus[f"se_confirmed_{wd}d"] = consensus[ccol] / total_safe
+
+    # ── SE MOMENTUM: 30d shrunk - 365d shrunk ──
+    if "weighted_se_30d_shrunk" in consensus.columns and "weighted_se_365d_shrunk" in consensus.columns:
+        consensus["se_momentum"] = consensus["weighted_se_30d_shrunk"] - consensus["weighted_se_365d_shrunk"]
+
+    # ── Drop all intermediates ──
+    drop_cols = [
+        "_sum_w_color",
+        "_w_hop1", "_w_hop2", "_w_hop3",
+        "_w_gradient", "_w_confirmed", "_w_isolation",
+    ]
+    # Temporal intermediates
+    for wd in available_windows:
+        drop_cols.append(f"_w_se_{wd}d_shrunk")
+        for h in [1, 2, 3]:
+            drop_cols.append(f"_w_hop{h}_se_{wd}d")
+        drop_cols.append(f"_w_gradient_{wd}d")
+        drop_cols.append(f"_w_confirmed_{wd}d")
+
+    drop_cols = [c for c in drop_cols if c in consensus.columns]
+    consensus.drop(columns=drop_cols, inplace=True)
 
     return consensus
 
@@ -572,6 +706,8 @@ def process(
     max_radius_m=500,
 ):
     try:
+        _target_partner_id = df_target[["mobile", "partner_id"]].copy() if "partner_id" in df_target.columns else None
+        df_target = df_target.drop(columns=["partner_id"], errors="ignore")
         df_poly["centroid_lat"] = pd.to_numeric(
             df_poly["poly"].apply(lambda p: p.centroid.y if p else np.nan), errors="coerce"
         )
@@ -633,7 +769,6 @@ def process(
                 .nunique()
                 .reset_index()
             )
-            # Rename back so merge keys align with _df_poly_snapshot
             unique_polys.rename(columns={"all_poly_partner_id": "partner_id"}, inplace=True)
 
             _df_poly_copy_src = pd.merge(
@@ -776,10 +911,13 @@ def process(
         )
         # Alias: downstream expects parent_installs
         df_target_final["parent_installs"] = df_target_final.get("installs", np.nan)
-
+        df_target_final["parent_total"] = df_target_final.get("total", np.nan)
+        df_target_final["parent_se"] = df_target_final.get("weighted_se_shrunk", np.nan)
+        # ADD right before "return df_target_final"
+        if _target_partner_id is not None:
+            df_target_final = df_target_final.merge(_target_partner_id, on="mobile", how="left")
         return df_target_final
 
     except Exception as e:
         print(f"ERROR IN PROCESSING OF HEXAGONS AND BOUNDARIES: {e}")
         return pd.DataFrame()
-    

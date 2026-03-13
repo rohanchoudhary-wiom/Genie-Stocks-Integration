@@ -31,8 +31,6 @@ def process_single_partner(partner_id, df_train, bad_se, mid_se):
     center_lat = np.median(sub_df["latitude"])
     center_lon = np.median(sub_df["longitude"])
 
-    cos_lat = cos(radians(center_lat))
-
     # Determine best hex size using configured search sizes and radius
     best_size = find_best_hexes(
         center_lat, center_lon, 
@@ -49,7 +47,7 @@ def process_single_partner(partner_id, df_train, bad_se, mid_se):
         hex_size_km=best_size,
     )
 
-    # Compute Stats
+    # Compute Stats — NOW WITH reference_date for temporal buckets
     hex_stats = compute_hexes(
         hexes,
         center_lat,
@@ -58,9 +56,8 @@ def process_single_partner(partner_id, df_train, bad_se, mid_se):
         bad_se,
         mid_se,
         best_size,
-        config.METERS_PER_DEG_LAT,
-        cos_lat,
         partner_id,
+        reference_date=config.TRAIN_END_DATE,
     )
 
     return hex_stats
@@ -84,26 +81,13 @@ def main():
 
     # 2. Build Desirability Fields
     print("Building Desirability Fields...")
-    # Note: build_desirability_field_idw in lib_spatial_weights.py uses hardcoded params?
-    # We should update lib_spatial_weights.py to take args if we want to experiment.
-    # I will call it with the args I see in the file signature if available.
-    # Looking at lib_spatial_weights.py signature:
-    # def build_desirability_field_idw(df, radius_meters=100.0, decline_weight=-2.0, install_weight=1.0, power=2.0)
-
-    # We use our config values
     df_train = build_desirability_field_idw(
         df_train,
-        radius_meters=max(H_INSTALL, H_DECLINE),  # Use max radius
+        radius_meters=max(H_INSTALL, H_DECLINE),
         decline_weight=WEIGHT_DECLINE,
         install_weight=WEIGHT_INSTALL,
     )
 
-    """
-    # Add Time Decay: THIS SHOULD BE DONE WHEN SCORING TEST LEADS, WRT THEIR DECISION TIME, NOT HERE.
-    eval_time = pd.Timestamp.now()
-    ages_days = (eval_time - df_train['decision_time']).dt.total_seconds() / 86400
-    df_train['field_weight'] = df_train['field_weight'] * np.exp(-LAMBDA_DECAY * ages_days)
-    """
     # Set 'h' based on weight sign (Custom Logic for Split H)
     df_train["h"] = np.where(df_train["field_weight"] >= 0, H_INSTALL, H_DECLINE)
 
@@ -146,33 +130,25 @@ def main():
         for future in tqdm(as_completed(futures), total=len(futures), desc="Partners"):
             hexagons.extend(future.result())
 
-    df_hex = pd.DataFrame(
-        hexagons,
-        columns=[
-            "partner_id",
-            "best_size",
-            "poly_id",
-            "poly",
-            "se",
-            "installs",
-            "declines",
-            "total",
-            "color",
-        ],
-    )
+    # LET DICTS DEFINE SCHEMA — no hardcoded columns list
+    df_hex = pd.DataFrame(hexagons)
 
-    # Temporary save for find_boundary - use CWD for compatibility with existing script imports
+    # Verify temporal columns made it through
+    temporal_check = [f"se_{wd}d" for wd in config.TEMPORAL_WINDOWS]
+    present = [c for c in temporal_check if c in df_hex.columns]
+    missing = [c for c in temporal_check if c not in df_hex.columns]
+    print(f"[HEX] Temporal columns present: {present}")
+    if missing:
+        print(f"[HEX] WARNING: Temporal columns missing: {missing}")
+
+    # Temporary save for find_boundary
     temp_poly_path = "artifacts/poly_stats.h5"
     df_hex.to_hdf(temp_poly_path, mode="w", key="df")
-    print("Saved intermediate {temp_poly_path}")
+    print(f"Saved intermediate {temp_poly_path} ({len(df_hex)} hexes, {len(df_hex.columns)} cols)")
 
     # 4. Find Boundaries
     print("Finding Boundaries...")
-
-    # Ensure run_find_boundary can find the file.
-    # run_find_boundary() uses 'artifacts/poly_stats.h5' from current working directory.
-    # Since we just saved it there, it should be fine.
-    run_find_boundary()  # Generates partner_cluster_boundaries.h5 in CWD
+    run_find_boundary()
 
     # Move result to artifacts
     bound_path = "partner_cluster_boundaries.h5"
@@ -180,30 +156,25 @@ def main():
 
     if os.path.exists(bound_path):
         import shutil
-
         shutil.move(bound_path, artifact_bound_path)
         print(f"Moved {bound_path} to {artifact_bound_path}")
 
     # 5. Competition / Overlaps (Final Map)
     print("Computing Competition Overlaps...")
 
-    # test.get_overlap reads artifacts/poly_stats.h5 and partner_cluster_boundaries.h5 from CWD
-    # We need to ensure partner_cluster_boundaries.h5 is in CWD for it.
     if os.path.exists(artifact_bound_path):
         import shutil
-
         shutil.copy(artifact_bound_path, bound_path)
 
     get_overlap(
         search_radius_deg=COMPETITION_SEARCH_RADIUS_DEG
-    )  # Generates poly_stats_final.h5 in CWD
+    )
 
     final_poly_path = "poly_stats_final.h5"
     artifact_final_poly_path = os.path.join(ARTIFACTS_DIR, "poly_stats_final.h5")
 
     if os.path.exists(final_poly_path):
         import shutil
-
         shutil.move(final_poly_path, artifact_final_poly_path)
         print(f"Saved {artifact_final_poly_path}")
 

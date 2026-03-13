@@ -22,9 +22,8 @@ def run_find_boundary():
     print(df["installs"].describe())
     print("p50 value is 4, so filtering for hexagons > 4")
 
-    # Compute deciles dynamically for both thresholds
     print("COMPUTING INSTALLS QUANTILES")
-    quantiles = [i / 10 for i in range(0, 11)]  # 0.0 to 1.0
+    quantiles = [i / 10 for i in range(0, 11)]
     df_quant = df["installs"].quantile(quantiles).reset_index()
     df_quant.columns = ["quantile", "value"]
     print(df_quant)
@@ -35,7 +34,6 @@ def run_find_boundary():
     print(f"Dynamic p30: {p30} | p70: {p70} | p90: {p90}")
 
     if config.ENABLE_BOUNDARY_FILTER == 1:
-        # Initial filter: keep only hexes above p30 (your density floor)
         print(f"Filtering hexagons with installs > p30 ({p30})")
         df = df[df["installs"] > p30].copy()
     else:
@@ -46,8 +44,6 @@ def run_find_boundary():
     for pid, df_sub in tqdm(df.groupby("partner_id"), desc="CLUSTERING_DBSCAN"):
         p90_id = -1
 
-        # if len(df_sub) < 2:
-        # continue  # Skip if too few points
         coords = np.radians(df_sub[["centroid_lat", "centroid_lon"]].values)
         eps_in_km = df_sub["best_size"].max() * 2
         eps_in_radians = eps_in_km / 6371.0
@@ -56,11 +52,9 @@ def run_find_boundary():
         labels = db.fit_predict(coords)
         df_sub["cluster_id"] = labels
 
-        # Step A: Keep all proper clusters (label >= 0)
         proper_clusters = df_sub[df_sub["cluster_id"] != -1].copy()
         proper_clusters["cluster_type"] = "dbscan_cluster"
 
-        # Step B: From noise (label == -1), rescue high-value singles (installs >= p80)
         noise = df_sub[df_sub["cluster_id"] == -1].copy()
         high_value_noise = noise[noise["installs"] >= p90].copy()
 
@@ -68,26 +62,19 @@ def run_find_boundary():
             print(
                 f"Partner {pid}: Rescuing {len(high_value_noise)} high-value singleton(s) (>= p90 installs)"
             )
-            # Assign unique cluster_ids to rescued singles.
-            # Start from a large negative offset to avoid collision with real labels
             high_value_noise["cluster_id"] = p90_id
             p90_id -= 1
-            high_value_noise["cluster_type"] = (
-                "p90_single_cluster"  # Tag as rule-based single
-            )
+            high_value_noise["cluster_type"] = "p90_single_cluster"
 
-        # Combine proper clusters + rescued singles
         cluster_results.append(pd.concat(
             [proper_clusters, high_value_noise], ignore_index=True
         ))
 
     df_cluster = pd.concat(cluster_results, ignore_index=True)
 
-    # Now process all clusters per partner (no partner filtering)
     print("DISSOLVING BOUNDARIES FOR EACH CLUSTER PER PARTNER")
     boundary_summary = []
 
-    # Projection for area calculations (UTM 43N for India; make dynamic if needed)
     project = partial(
         pyproj.transform, pyproj.Proj("epsg:4326"), pyproj.Proj("epsg:32643")
     )
@@ -95,10 +82,6 @@ def run_find_boundary():
     for (partner_id, cluster_id), group_df in tqdm(
         df_cluster.groupby(["partner_id", "cluster_id"])
     ):
-        # if len(group_df) < 2:
-        # continue  # Skip small clusters
-
-        # Dissolve hexes into one polygon
         dissolved = unary_union(
             [p.buffer(1e-9) for p in group_df["poly"].tolist() if p]
         ).buffer(-1e-9)
@@ -111,51 +94,60 @@ def run_find_boundary():
         if not dissolved:
             continue
 
-        # Centroid (simple geometric)
         center_lat, center_lon = dissolved.centroid.y, dissolved.centroid.x
 
-        # Boundary coordinates: list of [lon, lat] for exterior
         boundary_coords = (
             [[lon, lat] for lon, lat in dissolved.exterior.coords]
             if hasattr(dissolved, "exterior")
             else []
         )
 
-        # Projected area in km²
         projected_poly = transform(project, dissolved)
         area_km2 = projected_poly.area / 1e6
 
-        boundary_summary.append(
-            {
-                "partner_id": partner_id,
-                "cluster_id": cluster_id,
-                "cluster_type": group_df["cluster_type"].iloc[0]
-                if "cluster_type" in group_df.columns
-                else "unknown",
-                "center_lat": center_lat,
-                "center_lon": center_lon,
-                "total_installs": group_df["installs"].sum(),
-                "total_obs": group_df["total"].sum(), # Total hexes as observations
-                "n_hexes": len(group_df),
-                "area_km2": round(area_km2, 3),
-                "boundary_poly": dissolved,  # For point-in-poly checks
-                "boundary_coords": boundary_coords,  # For serialization
-            }
-        )
+        # ── Build row dict with ALL keys including temporal ──
+        row = {
+            "partner_id": partner_id,
+            "cluster_id": cluster_id,
+            "cluster_type": group_df["cluster_type"].iloc[0]
+            if "cluster_type" in group_df.columns
+            else "unknown",
+            "center_lat": center_lat,
+            "center_lon": center_lon,
+            "total_installs": group_df["installs"].sum(),
+            "total_obs": group_df["total"].sum(),
+            "n_hexes": len(group_df),
+            "area_km2": round(area_km2, 3),
+            "boundary_poly": dissolved,
+            "boundary_coords": boundary_coords,
+        }
+
+        # ── Temporal cluster stats (summed from hex-level) ──
+        for wd in config.TEMPORAL_WINDOWS:
+            inst_col = f"installs_{wd}d"
+            tot_col = f"total_{wd}d"
+            if inst_col in group_df.columns:
+                t_inst = group_df[inst_col].sum()
+                t_tot = group_df[tot_col].sum()
+                row[f"total_installs_{wd}d"] = int(t_inst)
+                row[f"total_obs_{wd}d"] = int(t_tot)
+                row[f"cluster_se_{wd}d"] = round(t_inst / t_tot, 4) if t_tot > 0 else np.nan
+            else:
+                row[f"total_installs_{wd}d"] = np.nan
+                row[f"total_obs_{wd}d"] = np.nan
+                row[f"cluster_se_{wd}d"] = np.nan
+
+        boundary_summary.append(row)
 
     boundaries_df = pd.DataFrame(boundary_summary)
     boundaries_df.to_hdf("artifacts/partner_cluster_boundaries.h5", key="df", mode="w")
     boundaries_df.drop(
         columns=["boundary_poly"], inplace=True
-    )  # Drop shapely obj for CSV
+    )
     boundaries_df.to_csv("artifacts/partner_cluster_boundaries.csv", index=False)
     print("\nFINAL BOUNDARY SUMMARY")
     print(boundaries_df.head(10))
 
-    # Example: Check if point is inside a boundary (reload polys if needed)
-    # For a new point (lat, lon), loop over boundaries_df, create Polygon from boundary_coords, check Point(lon, lat).within(poly)
-
-    # Plotting: One overview map with all dissolved polygons
     print("GENERATING OVERVIEW MAP WITH ALL CLUSTER BOUNDARIES")
     overview = folium.Map(
         location=[
@@ -190,7 +182,6 @@ def run_find_boundary():
     overview.save(f"{VIRTUAL_BOUNDARY_DIR}/all_clusters_overview.html")
     print(f"DONE. Open '{VIRTUAL_BOUNDARY_DIR}/all_clusters_overview.html' to view polygons.")
 
-    # New addition: Generate individual maps for each partner, showing their clusters
     print("GENERATING INDIVIDUAL PARTNER MAPS WITH CLUSTER BOUNDARIES")
     unique_partners = boundaries_df["partner_id"].unique()
     for partner_id in tqdm(unique_partners, desc="PARTNER_MAPS"):
@@ -198,16 +189,14 @@ def run_find_boundary():
         if partner_df.empty:
             continue
 
-        # Center the map on the mean of this partner's cluster centers
         mean_lat = partner_df["center_lat"].mean()
         mean_lon = partner_df["center_lon"].mean()
         partner_map = folium.Map(
             location=[mean_lat, mean_lon],
-            zoom_start=12,  # Zoom in a bit more for individual partners
+            zoom_start=12,
             tiles="CartoDB positron",
         )
 
-        # Add polygons for each cluster, with distinct colors if desired (here using same color for simplicity)
         for _, row in partner_df.iterrows():
             if not row["boundary_coords"]:
                 continue
@@ -225,7 +214,6 @@ def run_find_boundary():
                 tooltip=f"Cluster {row['cluster_id']} Center: {row['total_installs']} installs",
             ).add_to(partner_map)
 
-        # Save the map
         partner_map.save(f"{VIRTUAL_BOUNDARY_DIR}/partner_{partner_id}_clusters.html")
         print(
             f"Generated map for Partner {partner_id}: '{VIRTUAL_BOUNDARY_DIR}/partner_{partner_id}_clusters.html'"
@@ -233,16 +221,8 @@ def run_find_boundary():
 
     print("ALL PARTNER MAPS GENERATED.")
 
-    """
-    HOW TO USE IT LATER:
-
-    poly_df = pd.read_hdf('artifacts/partner_cluster_boundaries.h5', 'df')
-    pt = Point(lon, lat)
-    matches = poly_df[poly_df['boundary_poly'].apply(lambda p: p.contains(pt))]
-
-    """
-
     return boundaries_df
 
 if __name__ == "__main__":
     run_find_boundary()
+    

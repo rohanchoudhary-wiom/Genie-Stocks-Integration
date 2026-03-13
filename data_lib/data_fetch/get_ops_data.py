@@ -126,11 +126,8 @@ def compute_lead_capacity(df_leads: pd.DataFrame, eval_time: pd.Timestamp = None
         eval_time = pd.Timestamp.now()
 
     df = df_leads.copy()
-    # Pending = no decision_time
     df["is_pending"] = df["decision_time"].isna().astype(int)
-    # Resolved = has decision_time
     df["is_resolved"] = (~df["decision_time"].isna()).astype(int)
-    # Long-held = pending AND interest_time > 24h ago
     df["hours_open"] = (eval_time - df["interest_time"]).dt.total_seconds() / 3600.0
     df["is_long_held"] = ((df["is_pending"] == 1) & (df["hours_open"] > 24)).astype(int)
 
@@ -318,17 +315,14 @@ def compute_reliability(df_slots: pd.DataFrame) -> pd.DataFrame:
 
     df = df_slots.copy()
 
-    # late_arrive_feature: only count > 1 day tardiness
     df["late_arrive_feature"] = np.where(df["late_arrive_days"] > 1, df["late_arrive_days"], 0)
 
-    # late_severity: ordinal (0=on-time, 1=slightly late, 2=late, 3=very late)
     bins = [-np.inf, 0, 3, 7, np.inf]
     labels = [0, 1, 2, 3]
     df["late_severity"] = pd.cut(
         df["late_arrive_days"], bins=bins, labels=labels, right=True
     ).astype(float).fillna(0).astype(int)
 
-    # late_close_penalty: late_days × 1/(distance+1)  — close partner being late is worse
     df["late_close_penalty"] = (
         df["late_arrive_feature"] * (1.0 / (df["nearest_distance"].fillna(0) + 1.0))
     )
@@ -352,24 +346,49 @@ def compute_reliability(df_slots: pd.DataFrame) -> pd.DataFrame:
 # G + B_OPERATIONAL — PER-PARTNER SE + DECLINE RATE + RESPONSE TIME
 # =====================================================================
 
-def get_partner_performance(lookback_days: int = 30, end_dt: str = None) -> pd.DataFrame:
+def _build_perf_window_sql(wd: int, max_wd: int, end_ref: str) -> str:
+    """
+    Build conditional aggregate columns for one temporal window.
+    Mobile-level SE: COUNT(DISTINCT mobile) not COUNT(*).
+    Largest window needs no date filter (already in WHERE clause).
+    """
+    if wd == max_wd:
+        date_pred = ""
+    else:
+        date_pred = f"first_notified_time >= DATEADD(DAY, -{wd}, {end_ref}) AND "
+
+    return f"""
+        COUNT(DISTINCT CASE WHEN {date_pred}1=1 THEN mobile END)                                      AS total_{wd}d,
+        COUNT(DISTINCT CASE WHEN {date_pred}partner_id = lco_account_installed THEN mobile END)        AS installs_{wd}d,
+        COUNT(DISTINCT CASE WHEN {date_pred}first_event = 'DECLINED' THEN mobile END)                  AS declines_{wd}d,
+        MEDIAN(CASE WHEN {date_pred}1=1 THEN reaction_time_notif END)                                  AS median_response_min_{wd}d"""
+
+
+def get_partner_performance(end_dt: str = None) -> pd.DataFrame:
     """
     Per-partner SE, decline rate, and median response time from
-    t_node_decisions_active.  Feeds G (non-responder gate) + B_operational.
+    t_node_decisions_active.
+
+    One Snowflake round-trip. All windows from config.TEMPORAL_WINDOWS.
+    SE computed at mobile level (COUNT DISTINCT mobile).
+
+    Feeds: G (non-responder gate) + B_operational + RF feature matrix.
     """
     end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
+    max_wd = max(config.TEMPORAL_WINDOWS)
+
+    window_fragments = [
+        _build_perf_window_sql(wd, max_wd, end_ref)
+        for wd in config.TEMPORAL_WINDOWS
+    ]
 
     query = f"""
     SELECT
         partner_id,
-        COUNT(*)                                                                  AS total_decisions,
-        SUM(CASE WHEN partner_id = lco_account_installed THEN 1 ELSE 0 END)      AS installs_30d,
-        SUM(CASE WHEN first_event = 'DECLINED' THEN 1 ELSE 0 END)                AS declines_30d,
-        MEDIAN(reaction_time_notif)                                                AS median_response_min,
-        AVG(reaction_time_notif)                                                   AS mean_response_min
+        {','.join(window_fragments)}
     FROM t_node_decisions_active
-    WHERE first_notified_time >= DATEADD(DAY, -{lookback_days}, {end_ref})
-      and first_notified_time <= {end_ref}
+    WHERE first_notified_time >= DATEADD(DAY, -{max_wd}, {end_ref})
+      AND first_notified_time <= {end_ref}
       AND first_event IS NOT NULL
       AND first_event NOT IN ('', 'None')
     GROUP BY partner_id
@@ -380,13 +399,24 @@ def get_partner_performance(lookback_days: int = 30, end_dt: str = None) -> pd.D
             return pd.DataFrame()
         df.columns = df.columns.str.lower()
         df["partner_id"] = df["partner_id"].astype(str)
-        for col in ["total_decisions", "installs_30d", "declines_30d"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-        for col in ["median_response_min", "mean_response_min"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        df["se_30d"] = (df["installs_30d"] / df["total_decisions"].replace(0, np.nan)).fillna(0)
-        df["decline_rate_30d"] = (df["declines_30d"] / df["total_decisions"].replace(0, np.nan)).fillna(0)
+        # ── Type-cast all window columns ──
+        for wd in config.TEMPORAL_WINDOWS:
+            for col in [f"total_{wd}d", f"installs_{wd}d", f"declines_{wd}d"]:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+            df[f"median_response_min_{wd}d"] = pd.to_numeric(
+                df[f"median_response_min_{wd}d"], errors="coerce"
+            )
+
+        # ── Derived rates per window ──
+        for wd in config.TEMPORAL_WINDOWS:
+            tot = df[f"total_{wd}d"].replace(0, np.nan)
+            df[f"se_{wd}d"] = (df[f"installs_{wd}d"] / tot).fillna(0)
+            df[f"decline_rate_{wd}d"] = (df[f"declines_{wd}d"] / tot).fillna(0)
+
+        # ── Backward-compat aliases (gatekeeper + shock ledger read these) ──
+        df["total_decisions"] = df[f"total_{max_wd}d"]
+        df["median_response_min"] = df[f"median_response_min_{max_wd}d"]
 
         return df
     except Exception as e:
@@ -394,7 +424,7 @@ def get_partner_performance(lookback_days: int = 30, end_dt: str = None) -> pd.D
         return pd.DataFrame()
 
 
-def get_expected_daily_slots(lookback_days: int = 45, end_dt : str = None) -> pd.DataFrame:
+def get_expected_daily_slots(lookback_days: int = 45, end_dt: str = None) -> pd.DataFrame:
     """
     Rolling average daily installs per partner from booking_logs.
     """
@@ -409,7 +439,7 @@ def get_expected_daily_slots(lookback_days: int = 45, end_dt : str = None) -> pd
         WHERE event_name = 'lead_state_changed'
           AND TRY_PARSE_JSON(data):state::STRING = 'installed'
           AND added_time >= DATEADD(DAY, -{lookback_days}, {end_ref})
-          and added_time <= {end_ref}
+          AND added_time <= {end_ref}
         GROUP BY 1, 2
     )
     SELECT
@@ -437,10 +467,9 @@ def get_expected_daily_slots(lookback_days: int = 45, end_dt : str = None) -> pd
 # S — SHOCK LEDGER
 # =====================================================================
 
-def get_active_outages(recency_days: int = 7, end_dt : str = None) -> pd.DataFrame:
+def get_active_outages(recency_days: int = 7, end_dt: str = None) -> pd.DataFrame:
     """
     Active outages from outage_incidents_aggregated.
-    Table exists in system map but wasn't queried in production.
     """
     end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
     query = f"""
@@ -455,7 +484,7 @@ def get_active_outages(recency_days: int = 7, end_dt : str = None) -> pd.DataFra
     FROM prod_db.BUSINESS_EFFICIENCY_ROUTER_OUTAGE_DETECTION_AUDIT_PUBLIC.outage_incidents_aggregated
     WHERE LOWER(status) = 'active'
       AND created_at_ist >= DATEADD(DAY, -{recency_days}, {end_ref})
-      and created_at_ist <= {end_ref}
+      AND created_at_ist <= {end_ref}
     """
     try:
         df = _query_snowflake_df(query)
@@ -500,9 +529,7 @@ def compute_shock_flags(
                     "detail": f"devices={int(row['total_devices'])}, recency_h={row['min_recency_hours']:.0f}",
                 })
 
-    # 2. Decline spike: 7d vs 30d baseline from df_perf
-    #    df_perf has decline_rate_30d. We'd need a 7d query too.
-    #    For now we flag partners with extreme decline rates as a proxy.
+    # 2. Decline spike
     if not df_perf.empty:
         spike_mask = (
             (df_perf["decline_rate_30d"] >= sc.GATE_DECLINE_RATE_BLOCK)
@@ -516,7 +543,7 @@ def compute_shock_flags(
                 "detail": f"decline_rate={row['decline_rate_30d']:.2f}, n={int(row['total_decisions'])}",
             })
 
-    # 3. Capacity overload: pending > factor × expected_daily_slots
+    # 3. Capacity overload
     if not df_lead_cap.empty and not df_slots.empty:
         merged = df_lead_cap.merge(
             df_slots[["partner_id", "expected_daily_slots"]],
@@ -541,6 +568,39 @@ def compute_shock_flags(
 
 
 # =====================================================================
+# DELTAS — snapshot + trend columns for RF
+# =====================================================================
+
+def _compute_ops_deltas(ops: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each pair (smallest_window, larger_window), compute:
+        se_delta_{s}_{l}
+        decline_rate_delta_{s}_{l}
+        response_delta_{s}_{l}
+
+    Smallest window = most recent snapshot, delta = recent - baseline.
+    Positive se_delta → partner is improving.
+    Positive decline_rate_delta → partner is getting worse.
+    """
+    windows = sorted(config.TEMPORAL_WINDOWS)
+    smallest = windows[0]
+
+    for wd in windows[1:]:
+        ops[f"se_delta_{smallest}_{wd}"] = (
+            ops[f"se_{smallest}d"] - ops[f"se_{wd}d"]
+        )
+        ops[f"decline_rate_delta_{smallest}_{wd}"] = (
+            ops[f"decline_rate_{smallest}d"] - ops[f"decline_rate_{wd}d"]
+        )
+        ops[f"response_delta_{smallest}_{wd}"] = (
+            ops[f"median_response_min_{smallest}d"].fillna(0)
+            - ops[f"median_response_min_{wd}d"].fillna(0)
+        )
+
+    return ops
+
+
+# =====================================================================
 # COMBINED: build_partner_ops_vector
 # =====================================================================
 
@@ -549,27 +609,26 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
     Master function: pulls all operational data, computes features,
     returns one row per partner_id with the full ops vector.
 
-    Columns returned:
+    Temporal columns per window in config.TEMPORAL_WINDOWS:
+        se_{wd}d, decline_rate_{wd}d, median_response_min_{wd}d,
+        installs_{wd}d, declines_{wd}d, total_{wd}d
+
+    Delta columns (smallest vs each larger window):
+        se_delta_{s}_{l}, decline_rate_delta_{s}_{l}, response_delta_{s}_{l}
+
+    Static columns:
         partner_id,
-        # capacity
         nmbr_active_leads, long_held_leads_24h, queue_velocity,
-        # tickets
         active_tickets, median_tat_min, max_tat_min, ticket_resolution_rate,
-        # reliability
         late_arrive_median, late_arrive_max, late_severity_max,
         late_close_penalty, plan_created_rate, planning_strength,
-        # performance
-        se_30d, decline_rate_30d, median_response_min, total_decisions,
-        installs_30d, declines_30d,
-        # slots
         expected_daily_slots, active_days,
-        # shocks
-        has_shock, shock_types
+        has_shock, shock_types,
+        total_decisions, median_response_min  (backward-compat aliases)
     """
     print("[OPS VECTOR] Pulling lead lifecycle...")
     df_leads_raw = get_pending_leads_per_partner(start_dt, end_dt)
     eval_time = pd.Timestamp(end_dt)
-
     df_lead_cap = compute_lead_capacity(df_leads_raw, eval_time)
 
     print("[OPS VECTOR] Pulling ticket tasks...")
@@ -580,8 +639,8 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
     df_slots_raw = get_slot_confirmation(sc.OPS_SLOT_LOOKBACK_DATE, end_dt=end_dt)
     df_reliability = compute_reliability(df_slots_raw)
 
-    print("[OPS VECTOR] Pulling partner performance (SE + decline rate + response)...")
-    df_perf = get_partner_performance(lookback_days=sc.OPS_SE_WINDOW_DAYS, end_dt=end_dt)
+    print(f"[OPS VECTOR] Pulling partner performance (windows={config.TEMPORAL_WINDOWS})...")
+    df_perf = get_partner_performance(end_dt=end_dt)
 
     print("[OPS VECTOR] Pulling expected daily slots...")
     df_slots = get_expected_daily_slots(lookback_days=sc.OPS_SLOTS_ROLLING_DAYS, end_dt=end_dt)
@@ -591,7 +650,6 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
     df_shocks = compute_shock_flags(df_outages, df_perf, df_lead_cap, df_slots)
 
     # --- Merge all into a single partner-level frame ---
-    # Start from performance (most likely to have all partners)
     if df_perf.empty:
         print("[OPS VECTOR] WARNING: partner performance is empty, returning empty ops vector")
         return pd.DataFrame()
@@ -636,5 +694,61 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
 
     ops["shock_types"] = ops["shock_types"].fillna("")
 
-    print(f"[OPS VECTOR] Built ops vector for {len(ops)} partners")
+    # ── Compute deltas ──
+    ops = _compute_ops_deltas(ops)
+
+    print(f"[OPS VECTOR] Built ops vector for {len(ops)} partners, {len(ops.columns)} columns")
+
+    # ── Report ──
+    for wd in config.TEMPORAL_WINDOWS:
+        col = f"se_{wd}d"
+        if col in ops.columns:
+            print(f"  {col}: mean={ops[col].mean():.4f}  median={ops[col].median():.4f}")
+    smallest = min(config.TEMPORAL_WINDOWS)
+    for wd in sorted(config.TEMPORAL_WINDOWS):
+        if wd == smallest:
+            continue
+        dcol = f"se_delta_{smallest}_{wd}"
+        if dcol in ops.columns:
+            print(f"  {dcol}: mean={ops[dcol].mean():.4f}  std={ops[dcol].std():.4f}")
+
     return ops
+
+
+# =====================================================================
+# __main__ — run standalone
+# =====================================================================
+
+ 
+if __name__ == "__main__":
+    import os
+ 
+    OUT_DIR = "reports"
+    os.makedirs(OUT_DIR, exist_ok=True)
+ 
+    def _build_and_save(label: str, start_dt: str, end_dt: str, filename: str):
+        print(f"\n{'='*60}")
+        print(f"  {label}: {start_dt} → {end_dt}")
+        print(f"{'='*60}")
+        df = build_partner_ops_vector(start_dt, end_dt)
+        if df.empty:
+            print(f"[{label}] Empty ops vector. Nothing to save.")
+            return df
+        path = os.path.join(OUT_DIR, filename)
+        df.to_csv(path, index=False)
+        print(f"\n[{label}] Saved {len(df)} partners × {len(df.columns)} cols → {path}")
+        print(f"\n[{label}] COLUMN INVENTORY:")
+        for c in sorted(df.columns):
+            n_valid = df[c].notna().sum()
+            print(f"  {c:>40s}: {n_valid}/{len(df)}")
+        return df
+ 
+    df_ops_train = _build_and_save(
+        "TRAIN", config.TRAIN_START_DATE, config.TRAIN_END_DATE,
+        "partner_ops_train_vector.csv",
+    )
+    df_ops_test = _build_and_save(
+        "TEST", config.TEST_START_DATE, config.TEST_END_DATE,
+        "partner_ops_test_vector.csv",
+    )
+    
