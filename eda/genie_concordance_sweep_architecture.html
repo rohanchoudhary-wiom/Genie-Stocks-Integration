@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genie · RF & HGB Concordance Sweep — Pipeline Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-page:#f8f9fb;--bg-panel:#ffffff;--bg-card:#f1f3f7;--bg-code:#f4f5f8;
+  --border:#dfe3ea;--border-strong:#c4cbda;
+  --text-primary:#1a1d26;--text-body:#3d4251;--text-muted:#6b7185;--text-dim:#9199ad;
+  --amber:#c77d0a;--amber-bg:#fef6e8;--amber-border:#f5d68a;
+  --blue:#2563eb;--blue-bg:#eff5ff;--blue-border:#a5c0f5;
+  --green:#0d8565;--green-bg:#ecfdf3;--green-border:#86dbb8;
+  --red:#d93025;--red-bg:#fef1ef;--red-border:#f5a5a0;
+  --purple:#7c3aed;--purple-bg:#f3f0ff;--purple-border:#c4b0f5;
+  --cyan:#0e7490;--cyan-bg:#ecfeff;--cyan-border:#7dd3e8;
+  --pink:#c026a3;--pink-bg:#fdf2fa;--pink-border:#f0abde;
+  --orange:#c2410c;--orange-bg:#fff7ed;--orange-border:#fbb87a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg-page);color:var(--text-primary);font-family:'Instrument Sans',sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',monospace}
+
+.hero{padding:72px 60px 56px;background:linear-gradient(160deg,#fff 0%,#f0f3fa 50%,#e8edf8 100%);border-bottom:1px solid var(--border)}
+.hero-tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-border);padding:5px 13px;border-radius:4px;margin-bottom:18px}
+.hero h1{font-size:38px;font-weight:700;line-height:1.18;letter-spacing:-0.8px;max-width:780px}
+.hero h1 span{color:var(--blue)}
+.hero-sub{margin-top:12px;font-size:16px;color:var(--text-muted);max-width:680px}
+.hero-formula{margin-top:24px;display:inline-flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;padding:10px 20px;background:var(--bg-panel);border:1px solid var(--border-strong);border-radius:7px;color:var(--cyan)}
+.hero-formula em{font-style:normal;color:var(--text-dim)}
+
+.container{max-width:1280px;margin:0 auto;padding:0 40px}
+section{padding:60px 0 36px}
+section+section{border-top:1px solid var(--border)}
+.section-num{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px}
+.section-title{font-size:26px;font-weight:700;letter-spacing:-0.4px;margin-bottom:6px}
+.section-desc{font-size:14.5px;color:var(--text-muted);max-width:720px;margin-bottom:32px}
+
+.svg-wrap{width:100%;overflow-x:auto;background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:28px 20px;margin-bottom:24px}
+.svg-wrap svg{display:block;margin:0 auto}
+
+.card-grid{display:grid;gap:14px;margin-bottom:22px}
+.card-grid.cols-2{grid-template-columns:1fr 1fr}
+.card-grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+.card-grid.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+.card{background:var(--bg-panel);border:1px solid var(--border);border-radius:9px;padding:20px 22px}
+.card-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+.card-value{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;margin-bottom:4px}
+.card-note{font-size:13px;color:var(--text-muted)}
+
+.feat-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:22px}
+.feat-table thead th{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);text-align:left;padding:9px 14px;border-bottom:2px solid var(--border-strong)}
+.feat-table tbody td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-body)}
+.feat-table tbody tr:hover{background:var(--bg-card)}
+.feat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
+.feat-count{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px}
+
+.code-block{background:var(--bg-code);border:1px solid var(--border);border-radius:7px;padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-body);overflow-x:auto;line-height:1.7;margin-bottom:22px}
+.code-block .kw{color:var(--purple)}.code-block .fn{color:var(--blue)}.code-block .num{color:var(--amber)}.code-block .str{color:var(--green)}.code-block .cmt{color:var(--text-dim);font-style:italic}
+
+.callout{border-left:3px solid;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:22px;font-size:13.5px;color:var(--text-body)}
+.callout.amber{border-color:var(--amber);background:var(--amber-bg)}
+.callout.blue{border-color:var(--blue);background:var(--blue-bg)}
+.callout.green{border-color:var(--green);background:var(--green-bg)}
+.callout.red{border-color:var(--red);background:var(--red-bg)}
+.callout.purple{border-color:var(--purple);background:var(--purple-bg)}
+.callout strong{font-weight:700}
+
+.role-table{width:100%;border-collapse:collapse;margin-bottom:22px}
+.role-table th,.role-table td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;vertical-align:top}
+.role-table thead th{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);border-bottom:2px solid var(--border-strong);background:var(--bg-card)}
+.role-table tbody td{color:var(--text-body)}
+.role-table tbody tr:hover{background:var(--bg-card)}
+
+.tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;letter-spacing:.5px}
+.tag-blue{color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-border)}
+.tag-amber{color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-border)}
+.tag-green{color:var(--green);background:var(--green-bg);border:1px solid var(--green-border)}
+.tag-purple{color:var(--purple);background:var(--purple-bg);border:1px solid var(--purple-border)}
+.tag-cyan{color:var(--cyan);background:var(--cyan-bg);border:1px solid var(--cyan-border)}
+.tag-red{color:var(--red);background:var(--red-bg);border:1px solid var(--red-border)}
+.tag-pink{color:var(--pink);background:var(--pink-bg);border:1px solid var(--pink-border)}
+.tag-orange{color:var(--orange);background:var(--orange-bg);border:1px solid var(--orange-border)}
+
+@media(max-width:900px){.hero{padding:36px 20px}.hero h1{font-size:26px}.container{padding:0 18px}.card-grid.cols-3,.card-grid.cols-4{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="container">
+    <div class="hero-tag">Genie Pipeline · Architecture v2</div>
+    <h1>RF & HGB <span>Concordance Sweep</span><br>Model Training Pipeline</h1>
+    <p class="hero-sub">
+      A randomised hyperparameter search over Random Forest and HistGradientBoosting regressors,
+      swept across four concordance label-cleaning thresholds. Targets broadband installation
+      prediction via <code class="mono" style="color:var(--cyan)">installed_decision</code>.
+    </p>
+    <div class="hero-formula">
+      composite <em>=</em> 2 × AUC<sub>test</sub> <em>+</em> gap<sub>pp</sub>
+      <span style="color:var(--text-dim);font-size:12px;margin-left:8px">· θ ∈ {0.75, 0.80, 0.85, 0.90}</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ═══════════ §0 · MACRO FLOW ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--amber)">§0 — End-to-End Overview</div>
+  <div class="section-title">Pipeline Macro Flow</div>
+  <div class="section-desc">
+    The upstream Genie train period builds BallTree references and computes spatial features
+    that are already baked into test_scored.h5. This notebook takes that pre-scored test data,
+    merges ops features, applies concordance cleaning, then sweeps 960 model configurations.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1200 560" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker>
+        <marker id="arr-a" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#c77d0a"/></marker>
+        <marker id="arr-g" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#0d8565"/></marker>
+        <marker id="arr-dim" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#9199ad"/></marker>
+      </defs>
+
+      <!-- UPSTREAM -->
+      <rect x="16" y="14" width="318" height="204" rx="12" fill="#eff5ff" stroke="#a5c0f5" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="32" y="38" fill="#2563eb" font-size="10" font-weight="700" letter-spacing="1.5">UPSTREAM · TRAIN PERIOD</text>
+      <rect x="32" y="52" width="190" height="48" rx="7" fill="#fff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="127" y="72" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="600">train_data.h5</text>
+      <text x="127" y="88" text-anchor="middle" fill="#6b7185" font-size="9">historical decisions</text>
+      <text x="32" y="120" fill="#6b7185" font-size="9">Used for:</text>
+      <text x="32" y="136" fill="#3d4251" font-size="9">① Field/hex/hop feature computation</text>
+      <text x="32" y="150" fill="#3d4251" font-size="9">② BallTree concordance reference</text>
+      <text x="32" y="164" fill="#3d4251" font-size="9">③ KDE field maps, hex stats</text>
+      <text x="32" y="192" fill="#9199ad" font-size="8" font-style="italic">Features baked into test_scored.h5</text>
+
+      <line x1="240" y1="76" x2="380" y2="76" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-dim)"/>
+      <text x="300" y="68" fill="#9199ad" font-size="8">features flow</text>
+      <line x1="190" y1="170" x2="380" y2="250" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-dim)"/>
+      <text x="258" y="218" fill="#9199ad" font-size="8" transform="rotate(16,258,218)">labels flow</text>
+
+      <!-- THIS NOTEBOOK -->
+      <rect x="370" y="14" width="820" height="530" rx="12" fill="none" stroke="#c4cbda" stroke-width="1.5"/>
+      <text x="386" y="38" fill="#3d4251" font-size="10" font-weight="700" letter-spacing="1.5">THIS NOTEBOOK · CONCORDANCE SWEEP</text>
+
+      <rect x="390" y="52" width="200" height="60" rx="7" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="490" y="74" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">test_scored.h5</text>
+      <text x="490" y="96" text-anchor="middle" fill="#6b7185" font-size="9">pre-scored test leads</text>
+
+      <rect x="390" y="130" width="200" height="48" rx="7" fill="#fff" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="490" y="152" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="600">partner_ops.csv</text>
+      <text x="490" y="168" text-anchor="middle" fill="#6b7185" font-size="9">operational metrics</text>
+
+      <line x1="590" y1="82" x2="636" y2="102" stroke="#2563eb" stroke-width="1" marker-end="url(#arr)"/>
+      <line x1="590" y1="154" x2="636" y2="118" stroke="#7c3aed" stroke-width="1" marker-end="url(#arr)"/>
+      <rect x="642" y="88" width="130" height="44" rx="7" fill="#ecfeff" stroke="#0e7490" stroke-width="1.2"/>
+      <text x="707" y="108" text-anchor="middle" fill="#0e7490" font-size="9" font-weight="700">OPS MERGE</text>
+      <text x="707" y="122" text-anchor="middle" fill="#6b7185" font-size="8">on partner_id</text>
+
+      <line x1="772" y1="110" x2="806" y2="110" stroke="#0e7490" stroke-width="1" marker-end="url(#arr)"/>
+      <rect x="812" y="86" width="140" height="50" rx="7" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.2"/>
+      <text x="882" y="106" text-anchor="middle" fill="#0d8565" font-size="9" font-weight="700">FEATURE BUILD</text>
+      <text x="882" y="122" text-anchor="middle" fill="#6b7185" font-size="8">9 families · 100+</text>
+
+      <rect x="390" y="200" width="200" height="48" rx="7" fill="#fff" stroke="#c026a3" stroke-width="1.2"/>
+      <text x="490" y="220" text-anchor="middle" fill="#c026a3" font-size="10" font-weight="600">get_test_data()</text>
+      <text x="490" y="240" text-anchor="middle" fill="#6b7185" font-size="9">final_decision labels</text>
+
+      <rect x="642" y="200" width="180" height="60" rx="8" fill="#fef6e8" stroke="#c77d0a" stroke-width="2"/>
+      <text x="732" y="222" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">CONCORDANCE GATE</text>
+      <text x="732" y="240" text-anchor="middle" fill="#6b7185" font-size="9">BallTree r=100m, k≥3</text>
+      <text x="732" y="254" text-anchor="middle" fill="#c77d0a" font-size="8">θ ∈ {0.75 0.80 0.85 0.90}</text>
+      <line x1="590" y1="224" x2="636" y2="230" stroke="#c026a3" stroke-width="1" marker-end="url(#arr-a)"/>
+
+      <line x1="882" y1="136" x2="882" y2="292" stroke="#0d8565" stroke-width="1" marker-end="url(#arr-g)"/>
+      <line x1="822" y1="250" x2="862" y2="310" stroke="#c77d0a" stroke-width="1" marker-end="url(#arr-a)"/>
+      <rect x="800" y="298" width="170" height="48" rx="7" fill="#fdf2fa" stroke="#c026a3" stroke-width="1.2"/>
+      <text x="885" y="318" text-anchor="middle" fill="#c026a3" font-size="9" font-weight="700">TRAIN / TEST SPLIT</text>
+      <text x="885" y="334" text-anchor="middle" fill="#6b7185" font-size="8">70/30 strat, filter train</text>
+
+      <line x1="885" y1="346" x2="885" y2="376" stroke="#c026a3" stroke-width="1" marker-end="url(#arr)"/>
+      <rect x="770" y="382" width="230" height="80" rx="8" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="885" y="404" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">HYPERPARAMETER SWEEP</text>
+      <rect x="786" y="414" width="98" height="28" rx="5" fill="#fef6e8" stroke="#c77d0a" stroke-width="1"/>
+      <text x="835" y="432" text-anchor="middle" fill="#c77d0a" font-size="9" font-weight="600">RF × 120</text>
+      <rect x="892" y="414" width="98" height="28" rx="5" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+      <text x="941" y="432" text-anchor="middle" fill="#7c3aed" font-size="9" font-weight="600">HGB × 120</text>
+
+      <line x1="885" y1="462" x2="885" y2="490" stroke="#2563eb" stroke-width="1" marker-end="url(#arr)"/>
+      <rect x="800" y="496" width="170" height="36" rx="6" fill="#ecfeff" stroke="#0e7490" stroke-width="1.2"/>
+      <text x="885" y="518" text-anchor="middle" fill="#0e7490" font-size="9" font-weight="700">EVAL · COMPOSITE</text>
+
+      <line x1="970" y1="430" x2="1040" y2="400" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-g)"/>
+      <rect x="1046" y="382" width="130" height="32" rx="5" fill="#ecfdf3" stroke="#0d8565" stroke-width="1"/>
+      <text x="1111" y="402" text-anchor="middle" fill="#0d8565" font-size="9" font-weight="600">LEADERBOARD</text>
+      <line x1="970" y1="450" x2="1040" y2="440" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr-a)"/>
+      <rect x="1046" y="424" width="130" height="32" rx="5" fill="#fef6e8" stroke="#c77d0a" stroke-width="1"/>
+      <text x="1111" y="444" text-anchor="middle" fill="#c77d0a" font-size="9" font-weight="600">DEEP DIVE</text>
+      <line x1="970" y1="460" x2="1040" y2="480" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+      <rect x="1046" y="466" width="130" height="32" rx="5" fill="#eff5ff" stroke="#2563eb" stroke-width="1"/>
+      <text x="1111" y="486" text-anchor="middle" fill="#2563eb" font-size="9" font-weight="600">.joblib MODELS</text>
+
+      <rect x="696" y="372" width="62" height="98" rx="4" fill="none" stroke="#c77d0a" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="727" y="428" text-anchor="middle" fill="#c77d0a" font-size="20">⟲</text>
+      <text x="727" y="452" text-anchor="middle" fill="#c77d0a" font-size="7" font-weight="600">× 4 θ</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §1 · DATA ROLES ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--red)">§1 — Data Roles</div>
+  <div class="section-title">What Train & Test Data Are Used For</div>
+  <div class="section-desc">
+    The pipeline uses three distinct data sources with very different roles. The upstream train-period
+    data is <strong>never</strong> used for RF/HGB model training — it only supplies the BallTree reference labels
+    and the pre-computed spatial features that are already populated into the test-scored file.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1060 470" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs>
+        <marker id="r1" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker>
+        <marker id="r1a" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#c77d0a"/></marker>
+        <marker id="r1g" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#0d8565"/></marker>
+      </defs>
+
+      <!-- train_data.h5 -->
+      <rect x="30" y="30" width="280" height="165" rx="10" fill="#eff5ff" stroke="#2563eb" stroke-width="2"/>
+      <text x="170" y="56" text-anchor="middle" fill="#2563eb" font-size="12" font-weight="700">train_data.h5</text>
+      <text x="170" y="74" text-anchor="middle" fill="#6b7185" font-size="9">HISTORICAL TRAIN PERIOD</text>
+      <rect x="50" y="86" width="240" height="20" rx="3" fill="#dbeafe"/>
+      <text x="170" y="100" text-anchor="middle" fill="#2563eb" font-size="9" font-weight="600">NEVER used for RF/HGB training</text>
+      <text x="50" y="126" fill="#3d4251" font-size="10">① BallTree spatial reference</text>
+      <text x="50" y="144" fill="#3d4251" font-size="10">② Hard labels (INSTALLED/DECLINED)</text>
+      <text x="50" y="162" fill="#3d4251" font-size="10">③ Upstream: KDE, hex, hop features</text>
+      <text x="50" y="182" fill="#9199ad" font-size="9" font-style="italic">All features pre-baked into test_scored</text>
+
+      <!-- Arrow to BallTree -->
+      <line x1="310" y1="90" x2="400" y2="90" stroke="#c77d0a" stroke-width="1.5" marker-end="url(#r1a)"/>
+      <rect x="406" y="60" width="200" height="64" rx="8" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.5"/>
+      <text x="506" y="84" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">BallTree</text>
+      <text x="506" y="100" text-anchor="middle" fill="#6b7185" font-size="9">haversine · r=100m</text>
+      <text x="506" y="114" text-anchor="middle" fill="#6b7185" font-size="9">hard labels → concordance</text>
+
+      <!-- Dashed upstream feature flow -->
+      <line x1="310" y1="155" x2="400" y2="190" stroke="#9199ad" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#r1)"/>
+      <text x="332" y="180" fill="#9199ad" font-size="8">pre-computed</text>
+
+      <!-- test_scored.h5 -->
+      <rect x="30" y="230" width="280" height="195" rx="10" fill="#ecfdf3" stroke="#0d8565" stroke-width="2"/>
+      <text x="170" y="256" text-anchor="middle" fill="#0d8565" font-size="12" font-weight="700">test_scored.h5</text>
+      <text x="170" y="274" text-anchor="middle" fill="#6b7185" font-size="9">PRE-SCORED TEST PERIOD</text>
+      <rect x="50" y="286" width="240" height="20" rx="3" fill="#d1fae5"/>
+      <text x="170" y="300" text-anchor="middle" fill="#0d8565" font-size="9" font-weight="600">THE modelling dataset</text>
+      <text x="50" y="324" fill="#3d4251" font-size="10">• All spatial/hex/hop features baked in</text>
+      <text x="50" y="342" fill="#3d4251" font-size="10">• installed_decision target</text>
+      <text x="50" y="360" fill="#3d4251" font-size="10">• + ops merged on partner_id</text>
+      <text x="50" y="378" fill="#3d4251" font-size="10">• Split 70/30 → model-train / eval-test</text>
+      <text x="50" y="396" fill="#3d4251" font-size="10">• RF & HGB trained on THIS data</text>
+      <text x="50" y="414" fill="#0d8565" font-size="10" font-weight="600">• Concordance filters model-train only</text>
+
+      <!-- Arrow: test_scored → split -->
+      <line x1="310" y1="330" x2="400" y2="330" stroke="#0d8565" stroke-width="1.5" marker-end="url(#r1g)"/>
+
+      <!-- Split box -->
+      <rect x="406" y="274" width="200" height="114" rx="8" fill="#fff" stroke="#0d8565" stroke-width="1.5"/>
+      <text x="506" y="296" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="700">70 / 30 Split</text>
+      <line x1="420" y1="304" x2="592" y2="304" stroke="#dfe3ea" stroke-width="1"/>
+      <rect x="420" y="314" width="172" height="26" rx="4" fill="#fef6e8"/>
+      <text x="506" y="332" text-anchor="middle" fill="#c77d0a" font-size="9" font-weight="600">MODEL-TRAIN (filtered)</text>
+      <rect x="420" y="348" width="172" height="26" rx="4" fill="#ecfeff"/>
+      <text x="506" y="366" text-anchor="middle" fill="#0e7490" font-size="9" font-weight="600">EVAL-TEST (untouched)</text>
+
+      <!-- BallTree → filter -->
+      <line x1="506" y1="124" x2="506" y2="270" stroke="#c77d0a" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#r1a)"/>
+      <text x="514" y="200" fill="#c77d0a" font-size="8">concordance filter</text>
+      <text x="514" y="212" fill="#c77d0a" font-size="8">applied to train only</text>
+
+      <!-- RF/HGB boxes -->
+      <line x1="606" y1="328" x2="680" y2="308" stroke="#0d8565" stroke-width="1.2" marker-end="url(#r1g)"/>
+      <line x1="606" y1="360" x2="680" y2="364" stroke="#0e7490" stroke-width="1.2" marker-end="url(#r1)"/>
+
+      <rect x="686" y="278" width="170" height="52" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="771" y="300" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">RF / HGB .fit()</text>
+      <text x="771" y="318" text-anchor="middle" fill="#6b7185" font-size="9">trains on model-train</text>
+
+      <rect x="686" y="344" width="170" height="52" rx="7" fill="#ecfeff" stroke="#0e7490" stroke-width="1.2"/>
+      <text x="771" y="366" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="700">.predict() + eval</text>
+      <text x="771" y="382" text-anchor="middle" fill="#6b7185" font-size="9">scored on eval-test</text>
+
+      <!-- get_test_data -->
+      <rect x="690" y="60" width="240" height="64" rx="8" fill="#fdf2fa" stroke="#c026a3" stroke-width="1.2"/>
+      <text x="810" y="82" text-anchor="middle" fill="#c026a3" font-size="10" font-weight="700">get_test_data()</text>
+      <text x="810" y="100" text-anchor="middle" fill="#6b7185" font-size="9">Snowflake → final_decision labels</text>
+      <text x="810" y="114" text-anchor="middle" fill="#6b7185" font-size="9">→ hard_mobiles vs ambig_mobiles</text>
+
+      <!-- Legend -->
+      <rect x="690" y="420" width="340" height="40" rx="6" fill="#f1f3f7" stroke="#dfe3ea" stroke-width="1"/>
+      <line x1="706" y1="442" x2="730" y2="442" stroke="#c77d0a" stroke-width="2"/>
+      <text x="736" y="446" fill="#3d4251" font-size="9">concordance / label path</text>
+      <line x1="876" y1="442" x2="900" y2="442" stroke="#9199ad" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="906" y="446" fill="#3d4251" font-size="9">pre-computed feature path</text>
+    </svg>
+  </div>
+
+  <table class="role-table">
+    <thead><tr><th style="width:180px">Data Source</th><th style="width:100px">File</th><th>Role in This Notebook</th><th style="width:200px">Provides</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-blue">TRAIN PERIOD</span></td>
+        <td class="mono" style="font-size:11px;color:var(--blue)">train_data.h5</td>
+        <td><strong>BallTree reference only.</strong> Hard-labelled leads from the training period build a haversine BallTree. Nearby train labels determine whether ambiguous test leads pass the concordance gate. Also used upstream (before this notebook) to compute KDE fields, hex SE, hop features — all already baked into test_scored.h5.</td>
+        <td><span class="tag tag-amber">BallTree labels</span><br><span class="tag tag-purple" style="margin-top:4px">Upstream features</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">TEST SCORED</span></td>
+        <td class="mono" style="font-size:11px;color:var(--green)">test_scored.h5</td>
+        <td><strong>The actual modelling dataset.</strong> Every test-period lead with all spatial, hex, hop, boundary, geometry, and contested features pre-populated. Gets ops merged on. Split 70/30 into model-train (concordance-filtered) and eval-test (untouched). RF & HGB trained and evaluated entirely on this data.</td>
+        <td><span class="tag tag-green">Model-train data</span><br><span class="tag tag-cyan" style="margin-top:4px">Eval-test data</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-pink">TEST RAW</span></td>
+        <td class="mono" style="font-size:11px;color:var(--pink)">get_test_data()</td>
+        <td><strong>Label classification.</strong> Fetched from Snowflake to get <code class="mono">final_decision</code> per mobile. Used only to partition mobiles into hard (INSTALLED/DECLINED) vs ambiguous (INDETERMINATE/HANGING) — which feeds the concordance gate.</td>
+        <td><span class="tag tag-red">hard_mobiles</span><br><span class="tag tag-orange" style="margin-top:4px">ambig_mobiles</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-purple">OPS VECTOR</span></td>
+        <td class="mono" style="font-size:11px;color:var(--purple)">partner_ops.csv</td>
+        <td><strong>Feature enrichment.</strong> Per-partner operational metrics merged onto test_scored.h5 via left join on partner_id before modelling.</td>
+        <td><span class="tag tag-purple">ops features</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout red" style="font-family:'JetBrains Mono',monospace;font-size:13px">
+    <strong>Key insight:</strong> train_data.h5 is <em>never</em> used to train RF/HGB. It serves two upstream purposes:
+    (1) computing spatial features pre-populated into test_scored.h5, and (2) providing BallTree reference
+    labels for concordance gating. All model training happens on a 70% split of test_scored.h5.
+  </div>
+
+  <div class="callout green" style="font-family:'JetBrains Mono',monospace;font-size:13px">
+    <strong>Concordance flow:</strong> BallTree (from train_data.h5 hard labels) is queried for each ambiguous
+    lead in test_scored.h5. If ≥3 train neighbours within 100m show ≥θ agreement, the lead is promoted.
+    This is applied <em>only to the 70% model-train fold</em> — the 30% eval-test fold stays untouched.
+  </div>
+</section>
+
+<!-- ═══════════ §2 · DATA LOAD ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--blue)">§2 — Data Ingestion</div>
+  <div class="section-title">Data Load & Ops Merge</div>
+  <div class="section-desc">
+    test_scored.h5 (pre-scored leads with all spatial features) and partner_ops.csv (operational
+    metrics) are loaded and joined on partner_id to produce the single modelling dataframe.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 960 220" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs><marker id="a1" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker></defs>
+      <rect x="30" y="20" width="260" height="80" rx="8" fill="#eff5ff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="160" y="44" text-anchor="middle" fill="#2563eb" font-size="11" font-weight="700">test_scored.h5</text>
+      <text x="50" y="66" fill="#3d4251" font-size="9.5">• Spatial, hex, hop, boundary, geometry</text>
+      <text x="50" y="82" fill="#3d4251" font-size="9.5">• installed_decision target · lat/lon</text>
+
+      <rect x="30" y="118" width="260" height="80" rx="8" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="160" y="142" text-anchor="middle" fill="#7c3aed" font-size="11" font-weight="700">partner_ops_train_vector.csv</text>
+      <text x="50" y="164" fill="#3d4251" font-size="9.5">• SE, decline_rate, median_response</text>
+      <text x="50" y="180" fill="#3d4251" font-size="9.5">• queue_velocity, active_tickets, slots</text>
+
+      <line x1="290" y1="60" x2="386" y2="100" stroke="#2563eb" stroke-width="1" marker-end="url(#a1)"/>
+      <line x1="290" y1="158" x2="386" y2="118" stroke="#7c3aed" stroke-width="1" marker-end="url(#a1)"/>
+      <rect x="392" y="86" width="170" height="50" rx="8" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+      <text x="477" y="108" text-anchor="middle" fill="#0e7490" font-size="11" font-weight="700">LEFT JOIN</text>
+      <text x="477" y="126" text-anchor="middle" fill="#6b7185" font-size="10">on partner_id</text>
+
+      <line x1="562" y1="111" x2="630" y2="111" stroke="#0e7490" stroke-width="1" marker-end="url(#a1)"/>
+      <rect x="636" y="80" width="290" height="64" rx="8" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.5"/>
+      <text x="781" y="104" text-anchor="middle" fill="#0d8565" font-size="11" font-weight="700">df_raw — Modelling DataFrame</text>
+      <text x="656" y="124" fill="#3d4251" font-size="9.5">rows = test-period leads · cols = all features</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §3 · FEATURES ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--green)">§3 — Feature Engineering</div>
+  <div class="section-title">9 Feature Families · ~100+ Columns</div>
+  <div class="section-desc">
+    Features span nine semantic families. Spatial through geometry were pre-computed upstream
+    using train-period data and are already in test_scored.h5. Ops features are merged from the CSV.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1000 440" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <circle cx="500" cy="220" r="52" fill="#eff5ff" stroke="#2563eb" stroke-width="2"/>
+      <text x="500" y="216" text-anchor="middle" fill="#2563eb" font-size="11" font-weight="700">FEATURE</text>
+      <text x="500" y="232" text-anchor="middle" fill="#2563eb" font-size="11" font-weight="700">VECTOR</text>
+
+      <rect x="30" y="20" width="180" height="52" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="120" y="42" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">SPATIAL (13)</text>
+      <text x="120" y="60" text-anchor="middle" fill="#6b7185" font-size="9">field, wmean, momentum</text>
+      <line x1="210" y1="46" x2="452" y2="200" stroke="#c77d0a44" stroke-width="1"/>
+
+      <rect x="240" y="6" width="180" height="52" rx="7" fill="#eff5ff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="330" y="28" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">HEX (10)</text>
+      <text x="330" y="46" text-anchor="middle" fill="#6b7185" font-size="9">parent_se, color, overlap</text>
+      <line x1="400" y1="36" x2="476" y2="180" stroke="#2563eb44" stroke-width="1"/>
+
+      <rect x="580" y="6" width="180" height="52" rx="7" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="670" y="28" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="700">HOP (12)</text>
+      <text x="670" y="46" text-anchor="middle" fill="#6b7185" font-size="9">hop1/2/3, gradient, isolation</text>
+      <line x1="620" y1="50" x2="530" y2="185" stroke="#7c3aed44" stroke-width="1"/>
+
+      <rect x="790" y="40" width="190" height="52" rx="7" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 2"/>
+      <text x="885" y="62" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="700">HOP TEMPORAL (15)</text>
+      <text x="885" y="80" text-anchor="middle" fill="#6b7185" font-size="9">hop×window, gradients</text>
+      <line x1="800" y1="70" x2="548" y2="200" stroke="#7c3aed33" stroke-width="1"/>
+
+      <rect x="790" y="148" width="190" height="44" rx="7" fill="#fdf2fa" stroke="#c026a3" stroke-width="1.2"/>
+      <text x="885" y="168" text-anchor="middle" fill="#c026a3" font-size="10" font-weight="700">CONTESTED (7)</text>
+      <text x="885" y="184" text-anchor="middle" fill="#6b7185" font-size="9">area, radius, se, overlap</text>
+      <line x1="800" y1="170" x2="550" y2="215" stroke="#c026a344" stroke-width="1"/>
+
+      <rect x="790" y="250" width="190" height="44" rx="7" fill="#ecfeff" stroke="#0e7490" stroke-width="1.2"/>
+      <text x="885" y="270" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="700">BOUNDARY (12)</text>
+      <text x="885" y="286" text-anchor="middle" fill="#6b7185" font-size="9">edge, depth, clusters</text>
+      <line x1="800" y1="272" x2="548" y2="235" stroke="#0e749044" stroke-width="1"/>
+
+      <rect x="560" y="374" width="200" height="52" rx="7" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.2"/>
+      <text x="660" y="396" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="700">GEOMETRY (20)</text>
+      <text x="660" y="416" text-anchor="middle" fill="#6b7185" font-size="9">anisotropy, density, hull + temporal</text>
+      <line x1="590" y1="374" x2="516" y2="268" stroke="#0d856544" stroke-width="1"/>
+
+      <rect x="280" y="378" width="170" height="44" rx="7" fill="#fef1ef" stroke="#d93025" stroke-width="1.2"/>
+      <text x="365" y="398" text-anchor="middle" fill="#d93025" font-size="10" font-weight="700">LEAD (3)</text>
+      <text x="365" y="414" text-anchor="middle" fill="#6b7185" font-size="9">hard_density, regime, min_dist</text>
+      <line x1="380" y1="378" x2="490" y2="268" stroke="#d9302544" stroke-width="1"/>
+
+      <rect x="30" y="300" width="190" height="60" rx="7" fill="#fff7ed" stroke="#c2410c" stroke-width="1.2"/>
+      <text x="125" y="322" text-anchor="middle" fill="#c2410c" font-size="10" font-weight="700">OPS (dynamic)</text>
+      <text x="125" y="338" text-anchor="middle" fill="#6b7185" font-size="9">se, decline, response, slots</text>
+      <text x="125" y="352" text-anchor="middle" fill="#9199ad" font-size="8">cross-window deltas</text>
+      <line x1="220" y1="330" x2="452" y2="235" stroke="#c2410c44" stroke-width="1"/>
+    </svg>
+  </div>
+
+  <table class="feat-table">
+    <thead><tr><th></th><th>Family</th><th>Count</th><th>Key Features</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td><span class="feat-dot" style="background:var(--amber)"></span></td><td>Spatial</td><td class="feat-count" style="color:var(--amber)">13</td><td>predicted_field_hex, wmean, kswmean, min/max/std, momentum, 30d/60d/365d</td><td style="color:var(--text-dim)">KDE field</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--blue)"></span></td><td>Hex</td><td class="feat-count" style="color:var(--blue)">10</td><td>parent_se, parent_total, color_numeric, overlap, velocity, shrunk SE</td><td style="color:var(--text-dim)">Hex consensus</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--purple)"></span></td><td>Hop</td><td class="feat-count" style="color:var(--purple)">12</td><td>hop1/2/3 se_wmean, std, count, gradient_1to3, isolation_ratio</td><td style="color:var(--text-dim)">BallTree hops</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--purple)"></span></td><td>Hop Temporal</td><td class="feat-count" style="color:var(--purple)">15</td><td>hop×window wmean (3×3), gradients, confirmed per window</td><td style="color:var(--text-dim)">BallTree hops</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--pink)"></span></td><td>Contested</td><td class="feat-count" style="color:var(--pink)">7</td><td>area_km2, radius_m, se (30d/60d/365d), n_overlapping_partners</td><td style="color:var(--text-dim)">Overlap zones</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--cyan)"></span></td><td>Boundary</td><td class="feat-count" style="color:var(--cyan)">12</td><td>dist_to_edge, dist_to_center, depth_score, overlap_clusters, solo_cluster</td><td style="color:var(--text-dim)">DBSCAN edges</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--green)"></span></td><td>Geometry</td><td class="feat-count" style="color:var(--green)">20</td><td>anisotropy, density, hull_area, spread_m, gully/sparse + temporal</td><td style="color:var(--text-dim)">Morphology</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--red)"></span></td><td>Lead</td><td class="feat-count" style="color:var(--red)">3</td><td>hard_density, density_regime, min_dist</td><td style="color:var(--text-dim)">Lead-level</td></tr>
+      <tr><td><span class="feat-dot" style="background:var(--orange)"></span></td><td>Ops</td><td class="feat-count" style="color:var(--orange)">~20+</td><td>se/decline/response per window, deltas, queue_velocity, tickets, slots</td><td style="color:var(--text-dim)">Partner CSV</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════ §4 · CONCORDANCE ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--amber)">§4 — Label Cleaning</div>
+  <div class="section-title">Concordance-Gated Label Filtering</div>
+  <div class="section-desc">
+    Ambiguous leads (INDETERMINATE/HANGING) from test_scored.h5 are rescued or discarded based
+    on spatial concordance with <strong>train_data.h5</strong> hard labels.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1060 360" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#c77d0a"/></marker>
+        <marker id="a2g" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#0d8565"/></marker>
+        <marker id="a2r" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#d93025"/></marker>
+      </defs>
+
+      <rect x="30" y="40" width="200" height="54" rx="7" fill="#eff5ff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="130" y="62" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">train_data.h5 (hard)</text>
+      <text x="130" y="80" text-anchor="middle" fill="#6b7185" font-size="9">INSTALLED / DECLINED</text>
+
+      <rect x="30" y="114" width="200" height="54" rx="7" fill="#fff7ed" stroke="#c2410c" stroke-width="1.2"/>
+      <text x="130" y="136" text-anchor="middle" fill="#c2410c" font-size="10" font-weight="700">AMBIGUOUS (test period)</text>
+      <text x="130" y="154" text-anchor="middle" fill="#6b7185" font-size="9">INDETERMINATE / HANGING</text>
+
+      <line x1="230" y1="67" x2="290" y2="108" stroke="#2563eb" stroke-width="1" marker-end="url(#a2)"/>
+      <line x1="230" y1="141" x2="290" y2="122" stroke="#c2410c" stroke-width="1" marker-end="url(#a2)"/>
+
+      <rect x="296" y="88" width="180" height="62" rx="8" fill="#fef6e8" stroke="#c77d0a" stroke-width="2"/>
+      <text x="386" y="112" text-anchor="middle" fill="#c77d0a" font-size="11" font-weight="700">BallTree Query</text>
+      <text x="386" y="130" text-anchor="middle" fill="#6b7185" font-size="9">haversine · r=100m</text>
+      <text x="386" y="144" text-anchor="middle" fill="#6b7185" font-size="9">built from train labels</text>
+
+      <line x1="476" y1="119" x2="540" y2="119" stroke="#c77d0a" stroke-width="1.2" marker-end="url(#a2)"/>
+
+      <rect x="546" y="72" width="220" height="96" rx="8" fill="#fff" stroke="#c77d0a" stroke-width="2"/>
+      <text x="656" y="96" text-anchor="middle" fill="#c77d0a" font-size="11" font-weight="700">Concordance Test</text>
+      <text x="566" y="118" fill="#3d4251" font-size="10">1. neighbours ≥ k_min (3)</text>
+      <text x="566" y="136" fill="#3d4251" font-size="10">2. frac_pos = mean(is_install)</text>
+      <text x="566" y="154" fill="#3d4251" font-size="10">3. max(frac, 1−frac) ≥ θ ?</text>
+
+      <line x1="656" y1="168" x2="656" y2="204" stroke="#c77d0a" stroke-width="1.2"/>
+
+      <line x1="656" y1="204" x2="540" y2="264" stroke="#0d8565" stroke-width="1.2" marker-end="url(#a2g)"/>
+      <rect x="440" y="254" width="200" height="50" rx="7" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.5"/>
+      <text x="540" y="276" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="700">✓ PROMOTED</text>
+      <text x="540" y="294" text-anchor="middle" fill="#6b7185" font-size="9">Added to model-train set</text>
+      <text x="600" y="228" fill="#0d8565" font-size="10" font-weight="600">YES</text>
+
+      <line x1="656" y1="204" x2="780" y2="264" stroke="#d93025" stroke-width="1.2" marker-end="url(#a2r)"/>
+      <rect x="680" y="254" width="200" height="50" rx="7" fill="#fef1ef" stroke="#d93025" stroke-width="1.5"/>
+      <text x="780" y="276" text-anchor="middle" fill="#d93025" font-size="10" font-weight="700">✗ DISCARDED</text>
+      <text x="780" y="294" text-anchor="middle" fill="#6b7185" font-size="9">Too noisy for training</text>
+      <text x="716" y="228" fill="#d93025" font-size="10" font-weight="600">NO</text>
+
+      <rect x="820" y="72" width="210" height="86" rx="7" fill="#fef6e8" stroke="#c77d0a44" stroke-width="1"/>
+      <text x="925" y="96" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">Thresholds Swept</text>
+      <text x="840" y="120" fill="#c77d0a" font-size="20" font-weight="700">θ</text>
+      <text x="866" y="120" fill="#3d4251" font-size="11">= 0.75  0.80</text>
+      <text x="866" y="140" fill="#3d4251" font-size="11">= 0.85  0.90</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §5 · SPLIT ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--pink)">§5 — Train / Test Protocol</div>
+  <div class="section-title">Stratified Split on test_scored.h5</div>
+  <div class="section-desc">
+    The full modelling dataset is split 70/30 stratified on target first. Concordance filtering
+    is applied only to the 70% model-train fold. The 30% eval-test fold stays untouched.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 960 230" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs><marker id="a3" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#c026a3"/></marker></defs>
+
+      <rect x="30" y="70" width="190" height="58" rx="8" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.5"/>
+      <text x="125" y="94" text-anchor="middle" fill="#0d8565" font-size="11" font-weight="700">df_raw</text>
+      <text x="125" y="114" text-anchor="middle" fill="#6b7185" font-size="9">notna(target) rows</text>
+
+      <line x1="220" y1="88" x2="286" y2="60" stroke="#c026a3" stroke-width="1.2" marker-end="url(#a3)"/>
+      <line x1="220" y1="110" x2="286" y2="146" stroke="#c026a3" stroke-width="1.2" marker-end="url(#a3)"/>
+      <text x="244" y="82" fill="#c026a3" font-size="9" font-weight="600">70%</text>
+      <text x="244" y="134" fill="#c026a3" font-size="9" font-weight="600">30%</text>
+
+      <rect x="292" y="32" width="180" height="48" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="382" y="52" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">RAW MODEL-TRAIN</text>
+      <text x="382" y="70" text-anchor="middle" fill="#6b7185" font-size="9">stratified on target</text>
+
+      <line x1="472" y1="56" x2="530" y2="56" stroke="#c77d0a" stroke-width="1.2" marker-end="url(#a3)"/>
+      <rect x="536" y="28" width="186" height="52" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="2"/>
+      <text x="629" y="50" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">CONCORDANCE FILTER</text>
+      <text x="629" y="68" text-anchor="middle" fill="#6b7185" font-size="9">intersect with conc_idx</text>
+
+      <line x1="722" y1="54" x2="778" y2="54" stroke="#c77d0a" stroke-width="1.2" marker-end="url(#a3)"/>
+      <rect x="784" y="30" width="120" height="50" rx="7" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.5"/>
+      <text x="844" y="52" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="700">X_tr, y_tr</text>
+      <text x="844" y="68" text-anchor="middle" fill="#6b7185" font-size="9">cleaned</text>
+
+      <rect x="292" y="120" width="180" height="48" rx="7" fill="#ecfeff" stroke="#0e7490" stroke-width="1.2"/>
+      <text x="382" y="140" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="700">EVAL-TEST (untouched)</text>
+      <text x="382" y="158" text-anchor="middle" fill="#6b7185" font-size="9">label noise preserved</text>
+
+      <line x1="472" y1="144" x2="778" y2="144" stroke="#0e7490" stroke-width="1.2" marker-end="url(#a3)"/>
+      <rect x="784" y="120" width="120" height="50" rx="7" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+      <text x="844" y="142" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="700">X_te, y_te</text>
+      <text x="844" y="158" text-anchor="middle" fill="#6b7185" font-size="9">honest eval</text>
+
+      <text x="125" y="192" fill="#9199ad" font-size="10" font-weight="600">Config:</text>
+      <text x="200" y="192" fill="#6b7185" font-size="10">TEST_SIZE=0.30 · RANDOM_STATE=42 · FILL_VALUE=−999</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §6 · HYPERPARAMETERS ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--purple)">§6 — Hyperparameter Space</div>
+  <div class="section-title">RF & HGB Grids · 120 Sampled Configs Each</div>
+
+  <div class="card-grid cols-2">
+    <div class="card" style="border-color:var(--amber)">
+      <div class="card-label" style="color:var(--amber)">Random Forest Regressor</div>
+      <div class="code-block" style="margin-top:10px">
+<span class="cmt"># 3×5×4×3 = 180 → 120 sampled</span>
+n_estimators    = [<span class="num">200</span>, <span class="num">300</span>, <span class="num">500</span>]
+max_depth       = [<span class="num">6</span>, <span class="num">8</span>, <span class="num">12</span>, <span class="num">16</span>, <span class="kw">None</span>]
+min_samples_leaf= [<span class="num">20</span>, <span class="num">50</span>, <span class="num">100</span>, <span class="num">200</span>]
+max_features    = [<span class="str">"sqrt"</span>, <span class="num">0.3</span>, <span class="num">0.5</span>]</div>
+    </div>
+    <div class="card" style="border-color:var(--purple)">
+      <div class="card-label" style="color:var(--purple)">HistGradientBoosting Regressor</div>
+      <div class="code-block" style="margin-top:10px">
+<span class="cmt"># 4×4×4×4×3 = 768 → 120 sampled</span>
+learning_rate     = [<span class="num">0.02</span>, <span class="num">0.04</span>, <span class="num">0.07</span>, <span class="num">0.10</span>]
+max_depth         = [<span class="num">3</span>, <span class="num">4</span>, <span class="num">6</span>, <span class="num">8</span>]
+min_samples_leaf  = [<span class="num">30</span>, <span class="num">50</span>, <span class="num">100</span>, <span class="num">200</span>]
+l2_regularization = [<span class="num">0.5</span>, <span class="num">2.0</span>, <span class="num">5.0</span>, <span class="num">10.0</span>]
+max_leaf_nodes    = [<span class="num">15</span>, <span class="num">31</span>, <span class="num">63</span>]</div>
+    </div>
+  </div>
+  <div class="callout blue" style="font-family:'JetBrains Mono',monospace;font-size:13px">
+    <strong>HGB fixed:</strong> loss=squared_error · max_iter=1000 · max_bins=255 · early_stopping=True · validation_fraction=0.15 · n_iter_no_change=30
+  </div>
+</section>
+
+<!-- ═══════════ §7 · SWEEP ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--cyan)">§7 — Concordance Sweep Loop</div>
+  <div class="section-title">4 × 240 = 960 Model Evaluations</div>
+  <div class="section-desc">
+    The outer loop iterates thresholds. For each, the model-train set is re-filtered, then RF and
+    HGB sweeps execute. Each model is evaluated on the same untouched eval-test fold and scored with
+    <code class="mono">composite = 200 × AUC_test + gap_pp</code>.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1060 400" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs><marker id="a5" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#0e7490"/></marker></defs>
+
+      <rect x="20" y="16" width="1020" height="360" rx="12" fill="none" stroke="#c77d0a" stroke-width="1.5" stroke-dasharray="8 4"/>
+      <text x="40" y="42" fill="#c77d0a" font-size="12" font-weight="700">for conc in [0.75, 0.80, 0.85, 0.90]:</text>
+
+      <rect x="50" y="60" width="200" height="68" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="150" y="84" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">SPLIT + FILTER</text>
+      <text x="150" y="100" text-anchor="middle" fill="#6b7185" font-size="9">split(full) → filter(train)</text>
+      <text x="150" y="114" text-anchor="middle" fill="#6b7185" font-size="9">test stays untouched</text>
+
+      <line x1="250" y1="94" x2="300" y2="94" stroke="#0e7490" stroke-width="1.2" marker-end="url(#a5)"/>
+
+      <rect x="310" y="54" width="180" height="78" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="400" y="78" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">run_rf_sweep()</text>
+      <text x="400" y="96" text-anchor="middle" fill="#6b7185" font-size="9">120 × fit + eval</text>
+      <text x="400" y="114" text-anchor="middle" fill="#6b7185" font-size="9">→ best_rf</text>
+
+      <rect x="310" y="150" width="180" height="78" rx="7" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="400" y="174" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="700">run_hgb_sweep()</text>
+      <text x="400" y="192" text-anchor="middle" fill="#6b7185" font-size="9">120 × fit + eval</text>
+      <text x="400" y="210" text-anchor="middle" fill="#6b7185" font-size="9">→ best_hgb</text>
+
+      <line x1="490" y1="93" x2="550" y2="140" stroke="#0e7490" stroke-width="1" marker-end="url(#a5)"/>
+      <line x1="490" y1="189" x2="550" y2="160" stroke="#0e7490" stroke-width="1" marker-end="url(#a5)"/>
+
+      <rect x="556" y="114" width="210" height="74" rx="8" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+      <text x="661" y="138" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="700">eval_model()</text>
+      <text x="576" y="158" fill="#6b7185" font-size="9">• AUC train + test</text>
+      <text x="576" y="174" fill="#6b7185" font-size="9">• Decile SE (d1–d10), gap_pp</text>
+
+      <line x1="766" y1="130" x2="830" y2="80" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#a5)"/>
+      <rect x="836" y="60" width="180" height="38" rx="6" fill="#ecfdf3" stroke="#0d8565" stroke-width="1"/>
+      <text x="926" y="82" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="600">all_results.extend()</text>
+
+      <line x1="766" y1="150" x2="830" y2="140" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#a5)"/>
+      <rect x="836" y="120" width="180" height="38" rx="6" fill="#fef6e8" stroke="#c77d0a" stroke-width="1"/>
+      <text x="926" y="142" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="600">joblib.dump(best)</text>
+
+      <line x1="766" y1="170" x2="830" y2="198" stroke="#9199ad" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#a5)"/>
+      <rect x="836" y="180" width="180" height="38" rx="6" fill="#eff5ff" stroke="#2563eb" stroke-width="1"/>
+      <text x="926" y="202" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="600">saved_models dict</text>
+
+      <rect x="50" y="260" width="400" height="50" rx="7" fill="#ecfeff" stroke="#0e749044" stroke-width="1"/>
+      <text x="250" y="282" text-anchor="middle" fill="#0e7490" font-size="11" font-weight="700">COMPOSITE = 200 × AUC_test + gap_pp</text>
+      <text x="250" y="300" text-anchor="middle" fill="#6b7185" font-size="10">mono = all(d_i ≤ d_{i+1})</text>
+
+      <rect x="50" y="324" width="400" height="36" rx="6" fill="#f1f3f7" stroke="#dfe3ea" stroke-width="1"/>
+      <text x="250" y="348" text-anchor="middle" fill="#6b7185" font-size="11">4 × (120 RF + 120 HGB) = <tspan fill="#c77d0a" font-weight="700">960</tspan> total evaluations</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §8 · EVAL ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--green)">§8 — Leaderboard & Deep Dive</div>
+  <div class="section-title">Composite Ranking · Best-Model Diagnostics</div>
+  <div class="section-desc">
+    960 results are ranked by composite score. The overall best model gets a full diagnostic suite.
+  </div>
+
+  <div class="svg-wrap">
+    <svg viewBox="0 0 1000 280" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono',monospace">
+      <defs><marker id="a6" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#0d8565"/></marker></defs>
+
+      <rect x="30" y="104" width="150" height="52" rx="7" fill="#eff5ff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="105" y="126" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">all_results</text>
+      <text x="105" y="144" text-anchor="middle" fill="#6b7185" font-size="9">960 rows</text>
+
+      <line x1="180" y1="118" x2="250" y2="60" stroke="#0d8565" stroke-width="1" marker-end="url(#a6)"/>
+      <line x1="180" y1="130" x2="250" y2="122" stroke="#0d8565" stroke-width="1" marker-end="url(#a6)"/>
+      <line x1="180" y1="142" x2="250" y2="182" stroke="#0d8565" stroke-width="1" marker-end="url(#a6)"/>
+
+      <rect x="256" y="34" width="210" height="44" rx="7" fill="#ecfdf3" stroke="#0d8565" stroke-width="1.2"/>
+      <text x="361" y="54" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="700">LEADERBOARD → CSV</text>
+      <text x="361" y="70" text-anchor="middle" fill="#6b7185" font-size="9">sorted by composite desc</text>
+
+      <rect x="256" y="96" width="210" height="44" rx="7" fill="#fef6e8" stroke="#c77d0a" stroke-width="1.2"/>
+      <text x="361" y="116" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="700">CONCORDANCE SUMMARY</text>
+      <text x="361" y="132" text-anchor="middle" fill="#6b7185" font-size="9">groupby(conc, model).agg()</text>
+
+      <rect x="256" y="158" width="210" height="44" rx="7" fill="#eff5ff" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="361" y="178" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="700">BEST MODEL</text>
+      <text x="361" y="194" text-anchor="middle" fill="#6b7185" font-size="9">results_df.iloc[0]</text>
+
+      <line x1="466" y1="180" x2="530" y2="180" stroke="#c77d0a" stroke-width="1.2" marker-end="url(#a6)"/>
+
+      <rect x="536" y="24" width="170" height="36" rx="6" fill="#fef6e8" stroke="#c77d0a" stroke-width="1"/>
+      <text x="621" y="46" text-anchor="middle" fill="#c77d0a" font-size="10" font-weight="600">Decile SE Curve</text>
+      <rect x="536" y="72" width="170" height="36" rx="6" fill="#eff5ff" stroke="#2563eb" stroke-width="1"/>
+      <text x="621" y="94" text-anchor="middle" fill="#2563eb" font-size="10" font-weight="600">ROC + AUC</text>
+      <rect x="536" y="120" width="170" height="36" rx="6" fill="#ecfdf3" stroke="#0d8565" stroke-width="1"/>
+      <text x="621" y="142" text-anchor="middle" fill="#0d8565" font-size="10" font-weight="600">Feature Importance</text>
+      <rect x="536" y="168" width="170" height="36" rx="6" fill="#f3f0ff" stroke="#7c3aed" stroke-width="1"/>
+      <text x="621" y="190" text-anchor="middle" fill="#7c3aed" font-size="10" font-weight="600">Correlation Analysis</text>
+      <rect x="536" y="216" width="170" height="36" rx="6" fill="#ecfeff" stroke="#0e7490" stroke-width="1"/>
+      <text x="621" y="238" text-anchor="middle" fill="#0e7490" font-size="10" font-weight="600">Imp vs Corr Scatter</text>
+
+      <line x1="536" y1="180" x2="536" y2="42" stroke="#c77d0a33" stroke-width="1"/>
+      <line x1="536" y1="180" x2="536" y2="234" stroke="#c77d0a33" stroke-width="1"/>
+    </svg>
+  </div>
+</section>
+
+<!-- ═══════════ §9 · OUTPUTS ═══════════ -->
+<section>
+  <div class="section-num" style="color:var(--green)">§9 — Artifacts & Outputs</div>
+  <div class="section-title">Serialised Models & Reports</div>
+
+  <div class="card-grid cols-3">
+    <div class="card" style="border-left:3px solid var(--amber)">
+      <div class="card-label" style="color:var(--amber)">Saved Models</div>
+      <div class="card-value" style="color:var(--amber);font-size:16px">8 × .joblib</div>
+      <div class="card-note">RF + HGB × 4 thresholds · models/concordance_sweep/</div>
+    </div>
+    <div class="card" style="border-left:3px solid var(--blue)">
+      <div class="card-label" style="color:var(--blue)">Leaderboard</div>
+      <div class="card-value" style="color:var(--blue);font-size:16px">960 rows</div>
+      <div class="card-note">concordance_sweep_report.csv · metrics + decile cols</div>
+    </div>
+    <div class="card" style="border-left:3px solid var(--green)">
+      <div class="card-label" style="color:var(--green)">Diagnostics</div>
+      <div class="card-value" style="color:var(--green);font-size:16px">5 charts</div>
+      <div class="card-note">Decile SE, ROC, Importance, Correlation, Scatter</div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-bottom:50px;border-top:none;text-align:center">
+  <p style="color:var(--text-dim);font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:1px">
+    GENIE PIPELINE · CONCORDANCE SWEEP v2 · ARCHITECTURE DOCUMENT
+  </p>
+</section>
+
+</div>
+</body>
+</html>

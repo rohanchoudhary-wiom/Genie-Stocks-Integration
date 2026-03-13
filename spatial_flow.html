@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genie Spatial Pipeline — Flow Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #f0eeea;
+    --border: #ddd9d1;
+    --border-strong: #c5c0b6;
+    --text: #2c2a26;
+    --text-dim: #8a8578;
+    --accent-purple: #7c3aed;
+    --accent-blue: #2563eb;
+    --accent-teal: #0d9488;
+    --accent-amber: #d97706;
+    --accent-rose: #e11d48;
+    --accent-green: #16a34a;
+    --accent-orange: #ea580c;
+    --accent-purple-bg: #f3f0ff;
+    --accent-blue-bg: #eff5ff;
+    --accent-teal-bg: #effefa;
+    --accent-amber-bg: #fffbeb;
+    --accent-rose-bg: #fff1f3;
+    --accent-green-bg: #effff4;
+    --accent-orange-bg: #fff5ed;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { overflow-x: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Instrument Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  header {
+    padding: 48px 48px 0;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+  header h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 26px; font-weight: 700;
+    color: var(--text); letter-spacing: -0.5px;
+  }
+  header h1 span { color: var(--accent-purple); }
+  header .subtitle {
+    font-size: 13px; color: var(--text-dim);
+    margin-top: 4px; font-family: 'JetBrains Mono', monospace;
+  }
+
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    margin-top: 16px; padding: 14px 18px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--text-dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  .canvas { max-width: 1440px; margin: 36px auto; padding: 0 48px 80px; overflow-x: hidden; }
+  .flow { display: flex; flex-direction: column; gap: 0; overflow-x: hidden; }
+
+  .connector {
+    width: 2px; height: 28px;
+    background: var(--border-strong); margin: 0 auto; position: relative;
+  }
+  .connector::after {
+    content: '▾'; position: absolute; bottom: -7px; left: 50%;
+    transform: translateX(-50%); color: var(--border-strong); font-size: 11px;
+  }
+  .merge-label {
+    text-align: center; font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--text-dim); letter-spacing: 1.5px; padding: 4px 0;
+  }
+
+  .node {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px 28px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+    animation: fadeUp 0.4s ease both;
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .node > * { max-width: 100%; }
+
+  .df-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    max-width: 100%;
+  }
+  .node:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.06); border-color: var(--border-strong); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .node-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;
+  }
+  .node-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .node-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+
+  .node-body { display: flex; gap: 24px; align-items: flex-start; margin-top: 4px; min-width: 0; }
+  .node-body .text-side { flex: 1; min-width: 0; overflow-x: auto; }
+  .node-body .viz-side { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+  .node-detail {
+    margin-top: 14px; padding: 12px 14px;
+    background: var(--surface2); border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--text); line-height: 1.7;
+  }
+  .node-detail code {
+    color: var(--accent-teal); background: rgba(13,148,136,0.07);
+    padding: 1px 5px; border-radius: 3px; font-size: 11px;
+  }
+  .node-detail .dim { color: var(--text-dim); }
+
+  /* ─── Color variants ─── */
+  .c-purple .node-label { color: var(--accent-purple); }
+  .c-blue .node-label { color: var(--accent-blue); }
+  .c-teal .node-label { color: var(--accent-teal); }
+  .c-amber .node-label { color: var(--accent-amber); }
+  .c-rose .node-label { color: var(--accent-rose); }
+  .c-green .node-label { color: var(--accent-green); }
+  .c-orange .node-label { color: var(--accent-orange); }
+  .c-purple { border-left: 3px solid var(--accent-purple); background: linear-gradient(135deg, var(--accent-purple-bg) 0%, var(--surface) 40%); }
+  .c-blue { border-left: 3px solid var(--accent-blue); background: linear-gradient(135deg, var(--accent-blue-bg) 0%, var(--surface) 40%); }
+  .c-teal { border-left: 3px solid var(--accent-teal); background: linear-gradient(135deg, var(--accent-teal-bg) 0%, var(--surface) 40%); }
+  .c-amber { border-left: 3px solid var(--accent-amber); background: linear-gradient(135deg, var(--accent-amber-bg) 0%, var(--surface) 40%); }
+  .c-rose { border-left: 3px solid var(--accent-rose); background: linear-gradient(135deg, var(--accent-rose-bg) 0%, var(--surface) 40%); }
+  .c-green { border-left: 3px solid var(--accent-green); background: linear-gradient(135deg, var(--accent-green-bg) 0%, var(--surface) 40%); }
+  .c-orange { border-left: 3px solid var(--accent-orange); background: linear-gradient(135deg, var(--accent-orange-bg) 0%, var(--surface) 40%); }
+
+  /* ─── Sub-steps ─── */
+  .sub-steps { margin-top: 12px; display: flex; flex-direction: column; gap: 5px; }
+  .sub-step { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; color: var(--text); line-height: 1.5; }
+  .sub-step .num {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; flex-shrink: 0; margin-top: 1px;
+  }
+  .num-purple { background: rgba(124,58,237,0.1); color: var(--accent-purple); }
+  .num-blue { background: rgba(37,99,235,0.1); color: var(--accent-blue); }
+  .num-teal { background: rgba(13,148,136,0.1); color: var(--accent-teal); }
+  .num-amber { background: rgba(217,119,6,0.1); color: var(--accent-amber); }
+  .num-rose { background: rgba(225,29,72,0.1); color: var(--accent-rose); }
+  .num-green { background: rgba(22,163,74,0.1); color: var(--accent-green); }
+  .num-orange { background: rgba(234,88,12,0.1); color: var(--accent-orange); }
+
+  /* ─── Tags ─── */
+  .io-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .io-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    padding: 3px 8px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .io-tag.out { border-color: rgba(22,163,74,0.35); color: var(--accent-green); background: rgba(22,163,74,0.05); }
+
+  /* ─── Code snippets ─── */
+  .code-block {
+    margin-top: 12px;
+    background: #1e1e2e;
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    position: relative;
+    max-width: 100%;
+  }
+  .code-block::before {
+    content: attr(data-file);
+    position: absolute; top: 0; right: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; color: rgba(255,255,255,0.25);
+    padding: 4px 10px;
+    letter-spacing: 0.5px;
+  }
+  .code-block pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.65;
+    color: #cdd6f4;
+    white-space: pre;
+    margin: 0;
+  }
+  .code-block .kw { color: #cba6f7; }   /* keyword */
+  .code-block .fn { color: #89b4fa; }   /* function */
+  .code-block .st { color: #a6e3a1; }   /* string */
+  .code-block .cm { color: #6c7086; font-style: italic; }  /* comment */
+  .code-block .op { color: #89dceb; }   /* operator */
+  .code-block .nb { color: #f9e2af; }   /* number/builtin */
+  .code-block .vr { color: #fab387; }   /* variable highlight */
+
+  /* ─── Intuition callout ─── */
+  .intuition {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.65;
+    position: relative;
+    padding-left: 40px;
+  }
+  .intuition::before {
+    content: '💡';
+    position: absolute;
+    left: 14px;
+    top: 13px;
+    font-size: 15px;
+  }
+  .intuition strong { font-weight: 600; }
+  .intuition-purple { background: rgba(124,58,237,0.06); border: 1px solid rgba(124,58,237,0.15); color: #4c2a8a; }
+  .intuition-blue { background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.12); color: #1e3a6e; }
+  .intuition-teal { background: rgba(13,148,136,0.05); border: 1px solid rgba(13,148,136,0.12); color: #134e4a; }
+  .intuition-amber { background: rgba(217,119,6,0.05); border: 1px solid rgba(217,119,6,0.12); color: #78350f; }
+  .intuition-rose { background: rgba(225,29,72,0.05); border: 1px solid rgba(225,29,72,0.12); color: #881337; }
+  .intuition-green { background: rgba(22,163,74,0.05); border: 1px solid rgba(22,163,74,0.12); color: #14532d; }
+  .intuition-orange { background: rgba(234,88,12,0.05); border: 1px solid rgba(234,88,12,0.12); color: #7c2d12; }
+
+  /* ─── Parallel ─── */
+  .parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; overflow: hidden; }
+  .parallel > div { min-width: 0; overflow: hidden; }
+  .parallel::before {
+    content: 'PARALLEL'; position: absolute; top: -18px; left: 50%;
+    transform: translateX(-50%); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 2px; color: var(--text-dim);
+    background: var(--bg); padding: 0 12px; z-index: 1;
+  }
+
+  svg.viz { display: block; max-width: 100%; height: auto; }
+  svg.viz text { font-family: 'JetBrains Mono', monospace; }
+
+  @media (max-width: 900px) {
+    .parallel { grid-template-columns: 1fr; }
+    header, .canvas { padding-left: 16px; padding-right: 16px; }
+    .node-body { flex-direction: column; }
+    .node-body .viz-side { align-self: center; }
+    .code-block pre { font-size: 10px; }
+  }
+
+  /* ─── Data Tables ─── */
+  .data-section {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .data-section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .data-section-title .arrow-tag {
+    font-size: 9px; padding: 2px 7px; border-radius: 3px;
+    font-weight: 600; letter-spacing: 1px;
+  }
+  .arrow-in { background: rgba(124,58,237,0.08); color: var(--accent-purple); border: 1px solid rgba(124,58,237,0.2); }
+  .arrow-out { background: rgba(22,163,74,0.08); color: var(--accent-green); border: 1px solid rgba(22,163,74,0.2); }
+
+  .df-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+  .df-wrap caption {
+    text-align: left;
+    padding: 8px 12px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.3px;
+  }
+  .df-wrap th {
+    padding: 6px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 9.5px;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.3px;
+    position: sticky;
+    top: 0;
+  }
+  .df-wrap td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    color: var(--text);
+  }
+  .df-wrap tr:last-child td { border-bottom: none; }
+  .df-wrap tr:hover td { background: rgba(124,58,237,0.02); }
+
+  /* highlight columns */
+  .df-wrap .col-key { color: var(--accent-purple); font-weight: 600; }
+  .df-wrap .col-geo { color: var(--accent-blue); }
+  .df-wrap .col-se { color: var(--accent-teal); }
+  .df-wrap .col-field { color: var(--accent-orange); }
+  .df-wrap .col-hop { color: var(--accent-green); }
+  .df-wrap .col-rose { color: var(--accent-rose); }
+  .df-wrap .col-amber { color: var(--accent-amber); }
+  .df-wrap .na { color: #ccc; font-style: italic; }
+  .df-wrap .hi { background: rgba(22,163,74,0.06); }
+  .df-wrap .lo { background: rgba(225,29,72,0.04); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>process()</span> — Spatial Feature Pipeline</h1>
+  <p class="subtitle">data_lib.feature.spatial_features.py</p>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-purple)"></div> Entry / Exit</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-blue)"></div> Boundary Track</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-teal)"></div> Hex Consensus</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-amber)"></div> All-Hex Field</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-rose)"></div> Contested Metrics</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-orange)"></div> Gaussian KDE</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent-green)"></div> Hop Features</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div> Geometric Features</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div> Boundary Creation (upstream)</div>
+  </div>
+</header>
+
+<div class="canvas">
+<div class="flow">
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- UPSTREAM: BOUNDARY CREATION                      -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="node" style="animation-delay:0.02s; border-left: 3px solid #6366f1; background: linear-gradient(135deg, #eef2ff 0%, var(--surface) 40%);">
+    <div class="node-label" style="color:#6366f1;">UPSTREAM — PRODUCES df_bound</div>
+    <div class="node-title">run_find_boundary()</div>
+    <div class="node-desc">Reads hex stats, filters serviceable hexes, DBSCAN-clusters them per partner, dissolves hex polygons into boundary shapes. Output is <code>partner_cluster_boundaries.h5</code> — the <code>df_bound</code> input to <code>process()</code>.</div>
+
+    <div class="intuition" style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15); color: #3730a3; margin-top: 12px;">
+      <strong>Why boundaries exist:</strong> Partners serve thousands of hex cells, but we need a single "coverage shape" per partner to answer geometric questions — is this lead inside the service area? How far from the edge? How many partners overlap here? Boundaries are the macro envelope; hexes are the micro grid inside it.
+    </div>
+
+    <!-- PIPELINE VISUAL -->
+    <svg class="viz" width="100%" height="200" viewBox="0 0 800 200" style="margin: 12px 0 8px;">
+      <defs>
+        <linearGradient id="gBndry" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.05"/>
+          <stop offset="100%" stop-color="#6366f1" stop-opacity="0.01"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="800" height="200" rx="8" fill="url(#gBndry)"/>
+
+      <!-- STEP 1: All hexes -->
+      <rect x="10" y="12" width="140" height="176" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="80" y="28" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="600">1. poly_stats.h5</text>
+      <text x="80" y="40" text-anchor="middle" font-size="7" fill="#8a8578">all hexes (green+orange)</text>
+      <!-- hex grid with mixed colors -->
+      <polygon points="50,62 58,56 66,62 66,74 58,80 50,74" fill="rgba(22,163,74,0.15)" stroke="#16a34a" stroke-width="0.8"/>
+      <polygon points="66,62 74,56 82,62 82,74 74,80 66,74" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="0.8"/>
+      <polygon points="82,62 90,56 98,62 98,74 90,80 82,74" fill="rgba(22,163,74,0.15)" stroke="#16a34a" stroke-width="0.8"/>
+      <polygon points="34,62 42,56 50,62 50,74 42,80 34,74" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="0.8"/>
+      <polygon points="98,62 106,56 114,62 114,74 106,80 98,74" fill="rgba(22,163,74,0.1)" stroke="#16a34a" stroke-width="0.8"/>
+      <!-- row 2 -->
+      <polygon points="42,80 50,74 58,80 58,92 50,98 42,92" fill="rgba(22,163,74,0.15)" stroke="#16a34a" stroke-width="0.8"/>
+      <polygon points="58,80 66,74 74,80 74,92 66,98 58,92" fill="rgba(225,29,72,0.1)" stroke="#e11d48" stroke-width="0.8" stroke-dasharray="2,2"/>
+      <polygon points="74,80 82,74 90,80 90,92 82,98 74,92" fill="rgba(22,163,74,0.15)" stroke="#16a34a" stroke-width="0.8"/>
+      <polygon points="90,80 98,74 106,80 106,92 98,98 90,92" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="0.8"/>
+      <!-- row 3 -->
+      <polygon points="50,98 58,92 66,98 66,110 58,116 50,110" fill="rgba(22,163,74,0.15)" stroke="#16a34a" stroke-width="0.8"/>
+      <polygon points="66,98 74,92 82,98 82,110 74,116 66,110" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="0.8"/>
+      <polygon points="82,98 90,92 98,98 98,110 90,116 82,110" fill="rgba(22,163,74,0.1)" stroke="#16a34a" stroke-width="0.8"/>
+      <!-- crimson = excluded -->
+      <text x="66" y="88" text-anchor="middle" font-size="5" fill="#e11d48">✗</text>
+      <text x="80" y="136" text-anchor="middle" font-size="7" fill="#8a8578">crimson filtered out</text>
+      <text x="80" y="148" text-anchor="middle" font-size="7" fill="#6366f1">installs > p30 filter</text>
+
+      <!-- ARROW 1→2 -->
+      <line x1="155" y1="100" x2="175" y2="100" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrBnd)"/>
+      <defs><marker id="arrBnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#6366f1"/></marker></defs>
+
+      <!-- STEP 2: DBSCAN -->
+      <rect x="180" y="12" width="170" height="176" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="265" y="28" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="600">2. DBSCAN per partner</text>
+      <text x="265" y="40" text-anchor="middle" font-size="7" fill="#8a8578">eps = best_size×2 / 6371</text>
+      <!-- cluster A (tight group) -->
+      <circle cx="220" cy="72" r="3" fill="#2563eb" opacity="0.6"/>
+      <circle cx="230" cy="68" r="3" fill="#2563eb" opacity="0.6"/>
+      <circle cx="225" cy="80" r="3" fill="#2563eb" opacity="0.6"/>
+      <circle cx="235" cy="76" r="3" fill="#2563eb" opacity="0.6"/>
+      <circle cx="240" cy="84" r="3" fill="#2563eb" opacity="0.6"/>
+      <ellipse cx="228" cy="76" rx="22" ry="16" fill="none" stroke="#2563eb" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="228" y="100" text-anchor="middle" font-size="6" fill="#2563eb">cluster 0</text>
+      <!-- cluster B -->
+      <circle cx="290" cy="70" r="3" fill="#d97706" opacity="0.6"/>
+      <circle cx="298" cy="66" r="3" fill="#d97706" opacity="0.6"/>
+      <circle cx="302" cy="78" r="3" fill="#d97706" opacity="0.6"/>
+      <circle cx="294" cy="82" r="3" fill="#d97706" opacity="0.6"/>
+      <ellipse cx="296" cy="74" rx="18" ry="14" fill="none" stroke="#d97706" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="296" y="96" text-anchor="middle" font-size="6" fill="#d97706">cluster 1</text>
+      <!-- noise singleton rescued -->
+      <circle cx="260" cy="120" r="4" fill="#e11d48" opacity="0.5"/>
+      <text x="260" y="134" text-anchor="middle" font-size="6" fill="#e11d48">noise (−1)</text>
+      <circle cx="310" cy="120" r="4" fill="#7c3aed" stroke="#7c3aed" stroke-width="1.5" opacity="0.8"/>
+      <text x="310" y="134" text-anchor="middle" font-size="6" fill="#7c3aed">p90 rescued</text>
+      <text x="310" y="144" text-anchor="middle" font-size="5.5" fill="#8a8578">installs ≥ p90</text>
+      <!-- arrow from noise to rescued -->
+      <line x1="270" y1="120" x2="302" y2="120" stroke="#7c3aed" stroke-width="0.8" stroke-dasharray="3,2" marker-end="url(#arrBnd)"/>
+
+      <!-- ARROW 2→3 -->
+      <line x1="355" y1="100" x2="375" y2="100" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrBnd)"/>
+
+      <!-- STEP 3: Dissolve -->
+      <rect x="380" y="12" width="170" height="176" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="465" y="28" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="600">3. unary_union dissolve</text>
+      <text x="465" y="40" text-anchor="middle" font-size="7" fill="#8a8578">hex polys → 1 boundary shape</text>
+      <!-- dissolved boundary blob A -->
+      <path d="M410,65 C408,55 425,48 440,50 C455,48 468,55 470,65 C472,78 465,88 450,90 C435,92 412,80 410,65Z" fill="rgba(37,99,235,0.08)" stroke="#2563eb" stroke-width="1.5"/>
+      <!-- faint hex outlines inside -->
+      <polygon points="425,62 431,58 437,62 437,70 431,74 425,70" fill="none" stroke="#2563eb" stroke-width="0.3" opacity="0.3"/>
+      <polygon points="437,62 443,58 449,62 449,70 443,74 437,70" fill="none" stroke="#2563eb" stroke-width="0.3" opacity="0.3"/>
+      <polygon points="431,74 437,70 443,74 443,82 437,86 431,82" fill="none" stroke="#2563eb" stroke-width="0.3" opacity="0.3"/>
+      <text x="440" y="100" text-anchor="middle" font-size="6" fill="#2563eb">cluster 0 boundary</text>
+      <!-- dissolved boundary blob B -->
+      <path d="M480,65 C478,58 490,52 505,54 C518,52 528,58 530,68 C532,78 522,86 510,88 C498,90 480,78 480,65Z" fill="rgba(217,119,6,0.08)" stroke="#d97706" stroke-width="1.5"/>
+      <polygon points="495,62 501,58 507,62 507,70 501,74 495,70" fill="none" stroke="#d97706" stroke-width="0.3" opacity="0.3"/>
+      <polygon points="507,62 513,58 519,62 519,70 513,74 507,70" fill="none" stroke="#d97706" stroke-width="0.3" opacity="0.3"/>
+      <text x="505" y="98" text-anchor="middle" font-size="6" fill="#d97706">cluster 1 boundary</text>
+      <!-- singleton as tiny shape -->
+      <circle cx="465" cy="125" r="8" fill="rgba(124,58,237,0.08)" stroke="#7c3aed" stroke-width="1.2"/>
+      <text x="465" y="128" text-anchor="middle" font-size="5" fill="#7c3aed">p90</text>
+      <text x="465" y="146" text-anchor="middle" font-size="6" fill="#8a8578">single hex = its own poly</text>
+
+      <!-- ARROW 3→4 -->
+      <line x1="555" y1="100" x2="575" y2="100" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrBnd)"/>
+
+      <!-- STEP 4: Output -->
+      <rect x="580" y="12" width="205" height="176" rx="6" fill="#fff" stroke="#6366f1" stroke-width="1"/>
+      <text x="682" y="28" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="600">4. df_bound output</text>
+      <text x="682" y="40" text-anchor="middle" font-size="7" fill="#8a8578">partner_cluster_boundaries.h5</text>
+      <!-- mini table -->
+      <rect x="592" y="50" width="180" height="14" rx="2" fill="var(--surface2)"/>
+      <text x="600" y="60" font-size="6" fill="#8a8578">partner_id</text>
+      <text x="645" y="60" font-size="6" fill="#8a8578">cluster_id</text>
+      <text x="690" y="60" font-size="6" fill="#8a8578">area_km²</text>
+      <text x="735" y="60" font-size="6" fill="#8a8578">boundary_poly</text>
+      <!-- rows -->
+      <line x1="592" y1="64" x2="772" y2="64" stroke="var(--border)" stroke-width="0.5"/>
+      <text x="600" y="74" font-size="6" fill="#2c2a26">P1</text>
+      <text x="645" y="74" font-size="6" fill="#2c2a26">C1</text>
+      <text x="690" y="74" font-size="6" fill="#2c2a26">48.3</text>
+      <text x="735" y="74" font-size="6" fill="#2563eb">Polygon(...)</text>
+      <line x1="592" y1="78" x2="772" y2="78" stroke="var(--border)" stroke-width="0.3"/>
+      <text x="600" y="88" font-size="6" fill="#2c2a26">P1</text>
+      <text x="645" y="88" font-size="6" fill="#2c2a26">C2(p90)</text>
+      <text x="690" y="88" font-size="6" fill="#2c2a26">12.1</text>
+      <text x="735" y="88" font-size="6" fill="#7c3aed">Polygon(...)</text>
+      <line x1="592" y1="92" x2="772" y2="92" stroke="var(--border)" stroke-width="0.3"/>
+      <text x="600" y="102" font-size="6" fill="#2c2a26">P2</text>
+      <text x="645" y="102" font-size="6" fill="#2c2a26">C3</text>
+      <text x="690" y="102" font-size="6" fill="#2c2a26">35.7</text>
+      <text x="735" y="102" font-size="6" fill="#d97706">Polygon(...)</text>
+      <line x1="592" y1="106" x2="772" y2="106" stroke="var(--border)" stroke-width="0.3"/>
+      <text x="600" y="116" font-size="6" fill="#8a8578">...</text>
+
+      <!-- annotations -->
+      <text x="682" y="140" text-anchor="middle" font-size="7" fill="#6366f1">+ center_lat, center_lon</text>
+      <text x="682" y="152" text-anchor="middle" font-size="7" fill="#6366f1">+ total_installs, n_hexes</text>
+      <text x="682" y="164" text-anchor="middle" font-size="7" fill="#6366f1">+ cluster_type</text>
+      <text x="682" y="176" text-anchor="middle" font-size="7" fill="#6366f1" font-weight="600">→ feeds df_bound in process()</text>
+    </svg>
+
+    <div class="code-block" data-file="run_find_boundary — DBSCAN + dissolve">
+<pre><span class="cm"># Filter: only serviceable hexes (green/orange), installs > p30</span>
+df = df[df[<span class="st">"color"</span>].isin([<span class="st">"lightgreen"</span>, <span class="st">"orange"</span>])].copy()
+df = df[df[<span class="st">"installs"</span>] > p30].copy()
+
+<span class="cm"># DBSCAN per partner on haversine coords</span>
+coords = np.radians(df_sub[[<span class="st">"centroid_lat"</span>, <span class="st">"centroid_lon"</span>]])
+eps_in_radians = (df_sub[<span class="st">"best_size"</span>].max() * <span class="nb">2</span>) / <span class="nb">6371.0</span>
+db = <span class="fn">DBSCAN</span>(eps=eps_in_radians, min_samples=<span class="nb">2</span>, metric=<span class="st">"haversine"</span>)
+labels = db.fit_predict(coords)
+
+<span class="cm"># Rescue high-value singletons from noise</span>
+noise = df_sub[df_sub[<span class="st">"cluster_id"</span>] == -<span class="nb">1</span>]
+high_value_noise = noise[noise[<span class="st">"installs"</span>] >= <span class="vr">p90</span>].copy()
+high_value_noise[<span class="st">"cluster_type"</span>] = <span class="st">"p90_single_cluster"</span>
+
+<span class="cm"># Dissolve hex polygons into one boundary shape per cluster</span>
+dissolved = <span class="fn">unary_union</span>(
+    [p.buffer(<span class="nb">1e-9</span>) <span class="kw">for</span> p <span class="kw">in</span> group_df[<span class="st">"poly"</span>] <span class="kw">if</span> p]
+).buffer(-<span class="nb">1e-9</span>)
+
+<span class="cm"># If MultiPolygon, keep largest component</span>
+<span class="kw">if</span> dissolved.geom_type == <span class="st">"MultiPolygon"</span>:
+    dissolved = <span class="fn">max</span>(dissolved.geoms, key=<span class="kw">lambda</span> p: p.area)
+
+<span class="cm"># Project to UTM for area calculation</span>
+projected_poly = <span class="fn">transform</span>(project, dissolved)  <span class="cm"># EPSG:4326 → 32643</span>
+area_km2 = projected_poly.area / <span class="nb">1e6</span></pre>
+    </div>
+
+    <div class="sub-steps" style="margin-top: 12px;">
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">1</span><strong>Load poly_stats.h5</strong> — every hex with SE, color, installs. Filter to lightgreen + orange only (crimson = unserviceable).</div>
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">2</span><strong>Installs floor</strong> — drop hexes below p30 installs. Keeps only hexes with enough evidence to matter.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">3</span><strong>DBSCAN per partner</strong> — haversine metric on hex centroids. eps = <code>best_size × 2</code> (adaptive per partner). min_samples=2. Groups nearby hexes into clusters.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">4</span><strong>Noise rescue</strong> — DBSCAN labels isolated hexes as noise (−1). High-value singletons with installs ≥ p90 are rescued as their own <code>p90_single_cluster</code>.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">5</span><strong>Dissolve</strong> — <code>unary_union</code> merges all hex polygons in a cluster into one boundary shape. Buffer trick (<code>+1e-9</code> then <code>−1e-9</code>) fills tiny gaps between hexes.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(99,102,241,0.1);color:#6366f1;">6</span><strong>Compute metadata</strong> — centroid, projected area (UTM 43N), total_installs, n_hexes, cluster_type. Save as <code>partner_cluster_boundaries.h5</code>.</div>
+    </div>
+
+    <div class="intuition" style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15); color: #3730a3; margin-top: 10px;">
+      <strong>Buffer trick explained:</strong> Adjacent hexes touch at edges but may have infinitesimal gaps due to floating-point coordinates. <code>buffer(1e-9)</code> expands each hex by a nanometer, closing gaps. <code>unary_union</code> then merges them into one polygon. <code>buffer(-1e-9)</code> shrinks back to the original size. Without this, the union would produce a MultiPolygon with hairline cracks.
+    </div>
+
+    <div class="intuition" style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15); color: #3730a3; margin-top: 6px;">
+      <strong>Why rescue p90 singletons?</strong> — A hex with 200 installs that happens to be geographically isolated (no neighbour within eps) would be discarded by DBSCAN as noise. But it's a proven high-performance area — losing it means losing a partner's best territory from the boundary map. The p90 rule rescues these as <code>p90_single_cluster</code> (tagged separately so downstream can use <code>is_solo_cluster</code>).
+    </div>
+
+    <div class="data-section">
+      <div class="data-section-title" style="color:#6366f1;">
+        <span class="arrow-tag arrow-out">OUTPUT</span> boundaries_df → becomes df_bound in process()
+      </div>
+      <div class="df-wrap">
+        <table>
+          <tr><th>partner_id</th><th>cluster_id</th><th>cluster_type</th><th>center_lat</th><th>center_lon</th><th>total_installs</th><th>total_obs</th><th>n_hexes</th><th>area_km2</th><th>boundary_poly</th></tr>
+          <tr><td>P1</td><td>0</td><td>dbscan_cluster</td><td>28.4780</td><td>77.5000</td><td>2450</td><td>5800</td><td>42</td><td>48.3</td><td style="color:#2563eb">Polygon(…)</td></tr>
+          <tr><td>P1</td><td>−1</td><td style="color:#7c3aed">p90_single_cluster</td><td>28.4860</td><td>77.4920</td><td>210</td><td>380</td><td>1</td><td>12.1</td><td style="color:#7c3aed">Polygon(…)</td></tr>
+          <tr><td>P2</td><td>0</td><td>dbscan_cluster</td><td>28.4850</td><td>77.5180</td><td>1890</td><td>4200</td><td>30</td><td>35.7</td><td style="color:#d97706">Polygon(…)</td></tr>
+          <tr><td>P3</td><td>0</td><td>dbscan_cluster</td><td>28.4660</td><td>77.5020</td><td>1120</td><td>2800</td><td>18</td><td>22.5</td><td style="color:#0d9488">Polygon(…)</td></tr>
+        </table>
+      </div>
+      <div class="intuition" style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.15); color: #3730a3; font-size: 11.5px; margin-top: 4px;">
+        <strong>Read the data:</strong> P1 has two clusters — a large DBSCAN cluster (42 hexes, 48 km²) and a rescued p90 singleton (1 hex, 12 km²). The singleton has 210 installs — well above the p90 threshold — but was geographically isolated from the main cluster. P2 and P3 each have one DBSCAN cluster. These 4 rows are the <code>df_bound</code> that flows into <code>add_boundary_details_precise()</code> downstream.
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"></div>
+  <div class="merge-label">── FEEDS INTO ──</div>
+  <div class="connector"></div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- ENTRY                                            -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="node c-purple" style="animation-delay:0.05s">
+    <div class="node-body">
+      <div class="text-side">
+        <div class="node-label">ENTRY POINT</div>
+        <div class="node-title">process()</div>
+        <div class="node-desc">Main pipeline orchestrator. Takes four DataFrames — historical decision source points, fresh target leads, hex polygons per partner, and DBSCAN boundary clusters — and returns a single enriched target DataFrame with ~50+ spatial feature columns.</div>
+        <div class="io-row">
+          <span class="io-tag">df_source</span>
+          <span class="io-tag">df_target</span>
+          <span class="io-tag">df_poly</span>
+          <span class="io-tag">df_bound</span>
+          <span class="io-tag">λ=0.005</span>
+          <span class="io-tag">max_r=500m</span>
+        </div>
+
+        <div class="code-block" data-file="spatial_features.py">
+<pre><span class="kw">def</span> <span class="fn">process</span>(df_source, df_target, df_poly, df_bound,
+           lambda_decay=<span class="nb">0.005</span>, max_radius_m=<span class="nb">500</span>):
+
+    <span class="cm"># Pre-compute hex centroids (needed for distance features)</span>
+    df_poly[<span class="st">"centroid_lat"</span>] = df_poly[<span class="st">"poly"</span>].apply(
+        <span class="kw">lambda</span> p: p.centroid.y <span class="kw">if</span> p <span class="kw">else</span> np.nan
+    )
+    <span class="vr">_df_poly_snapshot</span> = df_poly.copy(deep=<span class="nb">True</span>)  <span class="cm"># freeze before mutation</span></pre>
+        </div>
+
+        <div class="intuition intuition-purple">
+          <strong>Why snapshot?</strong> — <code>get_parent_hexagon()</code> mutates <code>df_poly</code> in-place (adds columns). The All-Hex Field computation later needs the original clean copy to do its own sjoin. Without this snapshot, the second sjoin would break on duplicate column names.
+        </div>
+      </div>
+      <div class="viz-side">
+        <svg class="viz" width="200" height="160" viewBox="0 0 200 160">
+          <defs>
+            <linearGradient id="gPurple" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.15"/>
+              <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.03"/>
+            </linearGradient>
+          </defs>
+          <rect x="8" y="8" width="184" height="144" rx="10" fill="url(#gPurple)" stroke="#7c3aed" stroke-opacity="0.2"/>
+          <rect x="20" y="24" width="72" height="48" rx="6" fill="#fff" stroke="#c5c0b6"/>
+          <text x="56" y="44" text-anchor="middle" font-size="8" fill="#8a8578">df_source</text>
+          <circle cx="36" cy="58" r="2.5" fill="#ea580c" opacity="0.7"/>
+          <circle cx="44" cy="60" r="2.5" fill="#ea580c" opacity="0.5"/>
+          <circle cx="52" cy="56" r="2.5" fill="#ea580c" opacity="0.6"/>
+          <circle cx="60" cy="62" r="2.5" fill="#ea580c" opacity="0.4"/>
+          <circle cx="68" cy="57" r="2.5" fill="#ea580c" opacity="0.5"/>
+          <rect x="108" y="24" width="72" height="48" rx="6" fill="#fff" stroke="#c5c0b6"/>
+          <text x="144" y="44" text-anchor="middle" font-size="8" fill="#8a8578">df_target</text>
+          <circle cx="124" cy="58" r="3" fill="#7c3aed" opacity="0.7"/>
+          <circle cx="136" cy="62" r="3" fill="#7c3aed" opacity="0.6"/>
+          <circle cx="148" cy="56" r="3" fill="#7c3aed" opacity="0.5"/>
+          <circle cx="160" cy="60" r="3" fill="#7c3aed" opacity="0.7"/>
+          <rect x="20" y="84" width="72" height="52" rx="6" fill="#fff" stroke="#c5c0b6"/>
+          <text x="56" y="100" text-anchor="middle" font-size="8" fill="#8a8578">df_poly</text>
+          <polygon points="40,118 46,114 52,118 52,126 46,130 40,126" fill="none" stroke="#0d9488" stroke-width="1" opacity="0.5"/>
+          <polygon points="52,118 58,114 64,118 64,126 58,130 52,126" fill="none" stroke="#0d9488" stroke-width="1" opacity="0.5"/>
+          <polygon points="46,108 52,104 58,108 58,116 52,120 46,116" fill="none" stroke="#0d9488" stroke-width="1" opacity="0.4"/>
+          <rect x="108" y="84" width="72" height="52" rx="6" fill="#fff" stroke="#c5c0b6"/>
+          <text x="144" y="100" text-anchor="middle" font-size="8" fill="#8a8578">df_bound</text>
+          <path d="M124,116 C124,110 132,106 140,108 C148,110 156,108 160,114 C162,120 156,128 148,128 C140,128 132,126 128,122 Z" fill="none" stroke="#2563eb" stroke-width="1" opacity="0.5" stroke-dasharray="3,2"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── INPUT DATA TABLES ── -->
+    <div class="data-section">
+      <div class="data-section-title" style="color:var(--accent-purple);">
+        <span class="arrow-tag arrow-in">INPUT</span> 4 DataFrames feeding into process()
+      </div>
+
+      <div class="df-wrap">
+        <caption>df_target — 10 fresh leads to score (Greater Noida / Delhi NCR)</caption>
+        <table>
+          <tr><th>mobile</th><th>latitude</th><th>longitude</th><th>decision_time</th></tr>
+          <tr><td class="col-key">M001</td><td>28.4735</td><td>77.5040</td><td>2025-03-10 09:15</td></tr>
+          <tr><td class="col-key">M002</td><td>28.4800</td><td>77.5100</td><td>2025-03-10 10:30</td></tr>
+          <tr><td class="col-key">M003</td><td>28.4650</td><td>77.4950</td><td>2025-03-10 11:45</td></tr>
+          <tr><td class="col-key">M004</td><td>28.4900</td><td>77.5200</td><td>2025-03-10 12:00</td></tr>
+          <tr><td class="col-key">M005</td><td>28.4550</td><td>77.4880</td><td>2025-03-10 13:20</td></tr>
+          <tr><td class="col-key">M006</td><td>28.5000</td><td>77.5300</td><td>2025-03-10 14:10</td></tr>
+          <tr><td class="col-key">M007</td><td>28.4680</td><td>77.5050</td><td>2025-03-10 15:00</td></tr>
+          <tr><td class="col-key">M008</td><td>28.4850</td><td>77.4900</td><td>2025-03-10 16:15</td></tr>
+          <tr><td class="col-key">M009</td><td>28.4750</td><td>77.5150</td><td>2025-03-10 17:30</td></tr>
+          <tr><td class="col-key">M010</td><td>28.4600</td><td>77.5000</td><td>2025-03-10 18:45</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>df_source — historical decisions (showing 12 of ~5K rows; same schema for all source pts)</caption>
+        <table>
+          <tr><th>mobile</th><th>latitude</th><th>longitude</th><th>decision_time</th><th>field_weight</th><th>h</th><th>partner_id</th><th>final_decision</th><th>installed_decision</th></tr>
+          <tr><td>S0001</td><td>28.4740</td><td>77.5035</td><td>2025-02-18 11:20</td><td class="col-field">+1.0</td><td>320</td><td>P1</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0002</td><td>28.4738</td><td>77.5048</td><td>2025-01-22 14:05</td><td class="col-field">−1.0</td><td>310</td><td>P1</td><td>DECLINED</td><td>0</td></tr>
+          <tr><td>S0003</td><td>28.4805</td><td>77.5110</td><td>2025-03-01 09:40</td><td class="col-field">+1.0</td><td>280</td><td>P2</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0004</td><td>28.4798</td><td>77.5095</td><td>2025-02-10 16:30</td><td class="col-field">+1.0</td><td>290</td><td>P2</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0005</td><td>28.4810</td><td>77.5090</td><td>2025-01-05 10:15</td><td class="col-field">−1.0</td><td>300</td><td>P1</td><td>DECLINED</td><td>0</td></tr>
+          <tr><td>S0006</td><td>28.4900</td><td>77.5210</td><td>2025-02-25 13:00</td><td class="col-field">+1.0</td><td>250</td><td>P2</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0007</td><td>28.4895</td><td>77.5195</td><td>2024-12-14 08:30</td><td class="col-field">−1.0</td><td>260</td><td>P3</td><td>DECLINED</td><td>0</td></tr>
+          <tr><td>S0008</td><td>28.4685</td><td>77.5055</td><td>2025-03-05 15:45</td><td class="col-field">+1.0</td><td>340</td><td>P3</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0009</td><td>28.4670</td><td>77.5040</td><td>2025-02-08 12:20</td><td class="col-field">−1.0</td><td>350</td><td>P1</td><td>DECLINED</td><td>0</td></tr>
+          <tr><td>S0010</td><td>28.4855</td><td>77.4910</td><td>2025-01-30 11:00</td><td class="col-field">+1.0</td><td>270</td><td>P1</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0011</td><td>28.4750</td><td>77.5155</td><td>2025-03-08 09:10</td><td class="col-field">+1.0</td><td>290</td><td>P2</td><td>INSTALLED</td><td>1</td></tr>
+          <tr><td>S0012</td><td>28.4605</td><td>77.5005</td><td>2025-02-20 17:00</td><td class="col-field">−1.0</td><td>360</td><td>P3</td><td>DECLINED</td><td>0</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>df_poly — hex polygons per partner (showing 8 of ~200; poly column = Shapely Polygon, omitted)</caption>
+        <table>
+          <tr><th>partner_id</th><th>poly_id</th><th>se</th><th>total</th><th>installs</th><th>declines</th><th>color</th><th>is_overlap</th></tr>
+          <tr><td>P1</td><td>hex_01</td><td class="col-se hi">0.42</td><td>180</td><td>76</td><td>104</td><td style="color:#16a34a">lightgreen</td><td>0</td></tr>
+          <tr><td>P1</td><td>hex_02</td><td class="col-se">0.35</td><td>95</td><td>33</td><td>62</td><td style="color:#d97706">orange</td><td>1</td></tr>
+          <tr><td>P1</td><td>hex_03</td><td class="col-se lo">0.28</td><td>45</td><td>13</td><td>32</td><td style="color:#d97706">orange</td><td>0</td></tr>
+          <tr><td>P2</td><td>hex_04</td><td class="col-se hi">0.51</td><td>220</td><td>112</td><td>108</td><td style="color:#16a34a">lightgreen</td><td>1</td></tr>
+          <tr><td>P2</td><td>hex_05</td><td class="col-se">0.38</td><td>60</td><td>23</td><td>37</td><td style="color:#d97706">orange</td><td>0</td></tr>
+          <tr><td>P3</td><td>hex_06</td><td class="col-se lo">0.22</td><td>30</td><td>7</td><td>23</td><td style="color:#e11d48">crimson</td><td>1</td></tr>
+          <tr><td>P3</td><td>hex_07</td><td class="col-se hi">0.45</td><td>150</td><td>68</td><td>82</td><td style="color:#16a34a">lightgreen</td><td>0</td></tr>
+          <tr><td>P3</td><td>hex_08</td><td class="col-se lo">0.15</td><td>12</td><td>2</td><td>10</td><td style="color:#e11d48">crimson</td><td>0</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>df_bound — DBSCAN boundary clusters per partner (4 rows; boundary_poly = Shapely Polygon, omitted)</caption>
+        <table>
+          <tr><th>partner_id</th><th>cluster_id</th><th>center_lat</th><th>center_lon</th><th>area_km2</th><th>n_hexes</th><th>cluster_type</th></tr>
+          <tr><td>P1</td><td>C1</td><td>28.4780</td><td>77.5000</td><td>48.3</td><td>42</td><td>p90_multi_cluster</td></tr>
+          <tr><td>P1</td><td>C2</td><td>28.4860</td><td>77.4920</td><td>12.1</td><td>11</td><td>p90_single_cluster</td></tr>
+          <tr><td>P2</td><td>C3</td><td>28.4850</td><td>77.5180</td><td>35.7</td><td>30</td><td>p90_multi_cluster</td></tr>
+          <tr><td>P3</td><td>C4</td><td>28.4660</td><td>77.5020</td><td>22.5</td><td>18</td><td>p90_multi_cluster</td></tr>
+        </table>
+      </div>
+
+      <div class="intuition intuition-purple" style="margin-top: 4px; font-size: 12px;">
+        <strong>Partner coverage map:</strong>
+        P1 covers the widest area (C1+C2, 60 km²) — most leads fall inside P1.
+        P2 covers the east (C3, 36 km²) — overlaps with P1 for M002, M004, M009.
+        P3 covers the south (C4, 23 km²) — overlaps with P1 for M007, and with both P1+P2 for M004.
+        M005 falls outside all boundaries. M006 is inside P2 only.
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"></div>
+  <div class="merge-label">── FORK ──</div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- PARALLEL                                         -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="parallel">
+
+    <!-- ═══ LEFT: BOUNDARY TRACK ═══ -->
+    <div style="display:flex;flex-direction:column;gap:0;">
+      <div class="node c-blue" style="animation-delay:0.1s">
+        <div class="node-label">BOUNDARY TRACK</div>
+        <div class="node-title">add_boundary_details_precise()</div>
+
+        <div class="intuition intuition-blue">
+          <strong>Core question:</strong> "How deep inside a partner's service area is this lead?" — A lead near the edge of a boundary is riskier (the partner may not serve it well). A lead deep inside is safer. This function measures that geometric relationship.
+        </div>
+
+        <svg class="viz" width="100%" height="130" viewBox="0 0 360 130" style="margin: 10px 0 6px;">
+          <defs>
+            <linearGradient id="gBlue" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#2563eb" stop-opacity="0.06"/>
+              <stop offset="100%" stop-color="#2563eb" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="360" height="130" rx="8" fill="url(#gBlue)"/>
+          <path d="M40,100 C30,70 50,30 100,25 C150,20 200,15 250,30 C300,45 330,70 320,95 C310,115 260,120 200,118 C140,116 60,115 40,100 Z"
+                fill="rgba(37,99,235,0.06)" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6,3"/>
+          <text x="170" y="65" text-anchor="middle" font-size="9" fill="#2563eb" opacity="0.6">DBSCAN boundary polygon</text>
+          <circle cx="175" cy="80" r="4" fill="#2563eb" opacity="0.3"/>
+          <text x="175" y="95" text-anchor="middle" font-size="7" fill="#8a8578">cluster center</text>
+          <circle cx="260" cy="70" r="5" fill="#7c3aed"/>
+          <text x="260" y="60" text-anchor="middle" font-size="7" fill="#7c3aed" font-weight="600">target</text>
+          <line x1="260" y1="70" x2="305" y2="82" stroke="#e11d48" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="290" y="68" font-size="7" fill="#e11d48">dist_edge</text>
+          <line x1="260" y1="72" x2="177" y2="80" stroke="#0d9488" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="215" y="88" font-size="7" fill="#0d9488">dist_center</text>
+          <circle cx="55" cy="112" r="4" fill="#d97706" opacity="0.7"/>
+          <text x="75" y="112" font-size="7" fill="#d97706">outside pt</text>
+          <line x1="55" y1="108" x2="48" y2="98" stroke="#d97706" stroke-width="1" stroke-dasharray="2,2"/>
+        </svg>
+
+        <div class="code-block" data-file="add_boundary_details_precise">
+<pre><span class="cm"># Spatial join: which boundaries contain each target?</span>
+joined_gdf_4326 = gpd.sjoin(gdf_target, gdf_bound,
+                             how=<span class="st">"left"</span>, predicate=<span class="st">"within"</span>)
+
+<span class="cm"># Project to metric CRS for distance calculations</span>
+joined_gdf = joined_gdf_4326.to_crs(<span class="nb">7755</span>)
+poly_keep_proj = gpd.GeoSeries(joined_gdf[<span class="st">"boundary_poly_keep"</span>],
+                                crs=<span class="st">"EPSG:4326"</span>).to_crs(<span class="nb">7755</span>)
+
+<span class="cm"># How far is the target from the boundary edge?</span>
+joined_gdf[<span class="st">"dist_to_boundary_edge_m"</span>] = (
+    poly_keep_proj.boundary.distance(joined_gdf.geometry)
+)
+
+<span class="cm"># Derived: is the lead closer to the edge than to center?</span>
+df[<span class="st">"near_edge"</span>] = np.where(
+    df[<span class="st">"dist_to_boundary_edge_m"</span>] &lt; <span class="nb">0.7</span> * df[<span class="st">"dist_to_cluster_center_m"</span>],
+    <span class="nb">1</span>, <span class="nb">0</span>
+)
+df[<span class="st">"depth_score"</span>] = (
+    df[<span class="st">"dist_to_cluster_center_m"</span>] - df[<span class="st">"dist_to_boundary_edge_m"</span>]
+)</pre>
+        </div>
+
+        <div class="sub-steps" style="margin-top: 14px;">
+          <div class="sub-step"><span class="num num-blue">1</span><strong>sjoin left</strong> — targets × boundaries. Left join means targets outside all boundaries get NaN.</div>
+          <div class="sub-step"><span class="num num-blue">2</span><strong>Project to EPSG:7755</strong> — Indian projected CRS for metre-accurate distance calculations.</div>
+          <div class="sub-step"><span class="num num-blue">3</span><strong>dist_to_boundary_edge_m</strong> — Shapely <code>.boundary.distance()</code> on projected geometry.</div>
+          <div class="sub-step"><span class="num num-blue">4</span><strong>Outside points</strong> — <code>sjoin_nearest</code> to find closest boundary + 100m buffer for nearby-boundary count.</div>
+          <div class="sub-step"><span class="num num-blue">5</span><strong>depth_score</strong> = dist_center − dist_edge. Positive = deep inside, negative = near edge.</div>
+          <div class="sub-step"><span class="num num-blue">6</span><strong>GroupBy mobile</strong> → 12 aggregated boundary features (mean_dist_to_edge, total_area, nmbr_partners, etc.)</div>
+        </div>
+
+        <div class="intuition intuition-blue" style="margin-top: 10px;">
+          <strong>What boundary gives that hex can't:</strong> Boundaries are DBSCAN-derived convex hulls — they capture the <em>macro shape</em> of a partner's service area. A hex grid can't tell you "this lead is 50m from the edge of the entire coverage zone" because hexes tile uniformly and don't know about the overall boundary contour. depth_score, near_edge, nmbr_boundaries_within_100m — these are all <strong>geometric position features</strong> relative to the partner's outer envelope, not local conversion features.
+        </div>
+
+        <div class="io-row">
+          <span class="io-tag out">nmbr_overlap_clusters</span>
+          <span class="io-tag out">mean_dist_to_edge_m</span>
+          <span class="io-tag out">worst_depth_score</span>
+          <span class="io-tag out">total_area_boundaries</span>
+        </div>
+
+        <div class="data-section">
+          <div class="data-section-title" style="color:var(--accent-blue);">
+            <span class="arrow-tag arrow-out">OUTPUT</span> df_summary — 10 rows, 1 per mobile
+          </div>
+          <div class="df-wrap">
+            <table>
+              <tr><th>mobile</th><th>nmbr_overlap<br>_clusters</th><th>mean_dist<br>_to_edge_m</th><th>near_edge<br>_instances</th><th>mean_dist<br>_to_center_m</th><th>total_area<br>_boundaries</th><th>nmbr<br>_partners</th><th>worst<br>_depth_score</th><th>any_near<br>_edge</th><th>is_solo<br>_cluster</th><th>nearest_bnd<br>_dist_m</th><th>nmbr_bnd<br>_within_100m</th></tr>
+              <tr><td class="col-key">M001</td><td>2</td><td class="col-geo hi">1840</td><td>0</td><td class="col-geo">2150</td><td>60.4</td><td>1</td><td class="hi">310</td><td>0</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M002</td><td>3</td><td class="col-geo">920</td><td>1</td><td class="col-geo">1680</td><td>96.1</td><td>2</td><td>760</td><td>1</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M003</td><td>1</td><td class="col-geo lo">280</td><td>1</td><td class="col-geo">3100</td><td>48.3</td><td>1</td><td class="lo">−2820</td><td>1</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M004</td><td>4</td><td class="col-geo">1350</td><td>0</td><td class="col-geo">1900</td><td>106.5</td><td>3</td><td>550</td><td>0</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M005</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="col-geo lo">2450</td><td>0</td></tr>
+              <tr><td class="col-key">M006</td><td>1</td><td class="col-geo hi">2100</td><td>0</td><td class="col-geo">1520</td><td>35.7</td><td>1</td><td class="hi">580</td><td>0</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M007</td><td>3</td><td class="col-geo">640</td><td>1</td><td class="col-geo">1450</td><td>70.8</td><td>2</td><td>810</td><td>1</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M008</td><td>2</td><td class="col-geo hi">2600</td><td>0</td><td class="col-geo">890</td><td>60.4</td><td>1</td><td class="hi">1710</td><td>0</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M009</td><td>2</td><td class="col-geo">1100</td><td>0</td><td class="col-geo">1370</td><td>84.0</td><td>2</td><td>270</td><td>0</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M010</td><td>1</td><td class="col-geo lo">190</td><td>1</td><td class="col-geo">2800</td><td>22.5</td><td>1</td><td class="lo">−2610</td><td>1</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+            </table>
+          </div>
+          <div class="intuition intuition-blue" style="font-size: 11.5px; margin-top:4px;">
+            <strong>Read the data:</strong> M003 and M010 have negative depth scores and near_edge=1 — these leads are dangerously close to the boundary edge. M008 has depth=1710 with is_solo_cluster=1 — deep inside a single small cluster. M005 is outside all boundaries (all NaN except nearest_bnd_dist_m=2450m and nmbr_bnd_within_100m=0). M004 touches 3 partners across 4 cluster overlaps — the most contested lead.
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <!-- ─── CONTESTED ─── -->
+      <div class="node c-rose" style="animation-delay:0.15s">
+        <div class="node-label">SUB-CALL — CONTESTED</div>
+        <div class="node-title">compute_contested_metrics_engine()</div>
+
+        <div class="intuition intuition-rose">
+          <strong>Core question:</strong> "Where two or more partners overlap, how does that shared zone perform?" — If the intersection zone has high SE, the lead is in well-served territory regardless of which partner gets it. If SE is low, it's contested and underserved. The <strong>contested_field</strong> adds spatial smoothness via inline KDE.
+        </div>
+
+        <svg class="viz" width="100%" height="120" viewBox="0 0 340 120" style="margin: 10px 0 6px;">
+          <defs>
+            <linearGradient id="gRose" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#e11d48" stop-opacity="0.05"/>
+              <stop offset="100%" stop-color="#e11d48" stop-opacity="0.01"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="340" height="120" rx="8" fill="url(#gRose)"/>
+          <ellipse cx="130" cy="60" rx="90" ry="45" fill="rgba(37,99,235,0.06)" stroke="#2563eb" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="72" y="40" font-size="8" fill="#2563eb" opacity="0.6">Partner A</text>
+          <ellipse cx="210" cy="60" rx="90" ry="45" fill="rgba(217,119,6,0.06)" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="260" y="40" font-size="8" fill="#d97706" opacity="0.6">Partner B</text>
+          <ellipse cx="170" cy="60" rx="28" ry="38" fill="rgba(225,29,72,0.1)" stroke="#e11d48" stroke-width="1.5"/>
+          <text x="170" y="56" text-anchor="middle" font-size="8" fill="#e11d48" font-weight="600">contested</text>
+          <text x="170" y="67" text-anchor="middle" font-size="7" fill="#e11d48" opacity="0.7">∩ zone</text>
+          <circle cx="162" cy="46" r="2" fill="#e11d48" opacity="0.5"/>
+          <circle cx="172" cy="50" r="2" fill="#e11d48" opacity="0.6"/>
+          <circle cx="166" cy="74" r="2" fill="#e11d48" opacity="0.5"/>
+          <circle cx="175" cy="78" r="2" fill="#e11d48" opacity="0.4"/>
+          <text x="170" y="106" text-anchor="middle" font-size="7" fill="#8a8578">SE = installs / total inside ∩</text>
+        </svg>
+
+        <div class="code-block" data-file="compute_contested_metrics_engine">
+<pre><span class="cm"># Polygon intersection: the contested zone</span>
+cp = <span class="fn">reduce</span>(operator.and_, polys)  <span class="cm"># Shapely intersection</span>
+
+<span class="cm"># Cache by WKB signature — same poly set = same intersection</span>
+sig = <span class="fn">tuple</span>(<span class="fn">sorted</span>(p.wkb <span class="kw">for</span> p <span class="kw">in</span> polys))
+<span class="kw">if</span> sig <span class="kw">not in</span> poly_cache:
+    poly_cache[sig] = cp
+    <span class="cm"># Project, compute area, find source points inside</span>
+    cand_idx = <span class="fn">list</span>(sidx.intersection(cp.bounds))
+    mask = <span class="fn">contains_xy</span>(cp, cand.longitude, cand.latitude)
+    inside = cand.loc[mask]
+
+<span class="cm"># Zonal SE: raw conversion rate inside the overlap</span>
+se = n_installs / n_total
+
+<span class="cm"># Inline Gaussian field (same math as KDE engine)</span>
+k = np.exp(-<span class="nb">0.5</span> * (d**<span class="nb">2</span>) / (h**<span class="nb">2</span> + <span class="nb">1e-12</span>))
+base[<span class="st">"contested_field"</span>] = np.sum(k * eff_w) / (np.sum(k) + <span class="nb">1e-12</span>)</pre>
+        </div>
+
+        <div class="intuition intuition-rose" style="margin-top: 10px;">
+          <strong>What contested gives that hex can't:</strong> Contested metrics only exist when ≥2 partner boundaries overlap. They answer a very specific allocation question: "if I send this lead to partner A instead of B, what's the install rate <em>in the zone where both could serve it</em>?" Hexes are per-partner and don't know about inter-partner overlap geometry. Contested also provides the <strong>area and radius of the shared zone</strong> — a structural feature (large overlap = well-established shared territory, small overlap = edge-case fringe).
+        </div>
+
+        <div class="io-row">
+          <span class="io-tag out">contested_area_km2</span>
+          <span class="io-tag out">contested_se</span>
+          <span class="io-tag out">contested_field</span>
+          <span class="io-tag out">contested_radius_m</span>
+        </div>
+
+        <div class="data-section">
+          <div class="data-section-title" style="color:var(--accent-rose);">
+            <span class="arrow-tag arrow-out">OUTPUT</span> df_contested — merged into boundary summary
+          </div>
+          <div class="df-wrap">
+            <table>
+              <tr><th>mobile</th><th>n_overlap<br>_partners</th><th>contested<br>_area_km2</th><th>contested<br>_radius_m</th><th>contested<br>_centroid_lat</th><th>contested<br>_centroid_lon</th><th>contested<br>_installs</th><th>contested<br>_total</th><th>contested<br>_se</th><th>contested<br>_field</th></tr>
+              <tr><td class="col-key">M001</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M002</td><td>2</td><td class="col-rose">4.82</td><td class="col-rose">1239</td><td>28.4810</td><td>77.5085</td><td>38</td><td>95</td><td class="col-rose hi">0.4000</td><td class="col-rose">0.3750</td></tr>
+              <tr><td class="col-key">M003</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M004</td><td>3</td><td class="col-rose">1.15</td><td class="col-rose">605</td><td>28.4892</td><td>77.5195</td><td>12</td><td>40</td><td class="col-rose">0.3000</td><td class="col-rose">0.2640</td></tr>
+              <tr><td class="col-key">M005</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M006</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M007</td><td>2</td><td class="col-rose">6.35</td><td class="col-rose">1422</td><td>28.4675</td><td>77.5038</td><td>28</td><td>72</td><td class="col-rose hi">0.3889</td><td class="col-rose">0.4120</td></tr>
+              <tr><td class="col-key">M008</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M009</td><td>2</td><td class="col-rose">3.60</td><td class="col-rose">1070</td><td>28.4758</td><td>77.5140</td><td>22</td><td>65</td><td class="col-rose">0.3385</td><td class="col-rose">0.3510</td></tr>
+              <tr><td class="col-key">M010</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+            </table>
+          </div>
+          <div class="intuition intuition-rose" style="font-size: 11.5px; margin-top:4px;">
+            <strong>Read the data:</strong> Only 4 leads (M002, M004, M007, M009) have contested metrics — these are the ones inside ≥2 partner boundaries. M001, M003, M006, M008, M010 each sit inside only 1 partner → no intersection polygon exists → all NaN. M004's contested zone is tiny (1.15 km², radius 605m) because the 3-partner overlap is a small sliver, with only 40 decisions inside — the least reliable contested_se.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RIGHT: HEX CONSENSUS TRACK ═══ -->
+    <div style="display:flex;flex-direction:column;gap:0;">
+      <div class="node c-teal" style="animation-delay:0.1s">
+        <div class="node-label">HEX CONSENSUS TRACK</div>
+        <div class="node-title">get_parent_hexagon()</div>
+
+        <div class="intuition intuition-teal">
+          <strong>Core question:</strong> "What's the best estimate of installation probability at this location, given all partners whose hexes cover it?" — A single target may sit inside hexes from 3 different partners, each with different SE. We can't just pick one — we need a <strong>weighted consensus</strong> that respects evidence (total decisions) and applies <strong>shrinkage</strong> so low-evidence hexes don't dominate.
+        </div>
+
+        <!-- WHY IS THIS NEEDED — comparative diagram -->
+        <div class="intuition intuition-teal" style="padding-left: 16px; margin-top: 10px;">
+          <div style="display:flex; align-items: flex-start; gap: 10px;">
+            <span style="font-size: 15px; margin-top: -1px;">🔬</span>
+            <div>
+              <strong>Why do we need hex consensus when boundary + contested already exist?</strong><br>
+              They answer fundamentally different questions at different spatial scales:
+            </div>
+          </div>
+        </div>
+
+        <svg class="viz" width="100%" height="210" viewBox="0 0 720 210" style="margin: 6px 0 10px;">
+          <defs>
+            <linearGradient id="gCompare" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#2563eb" stop-opacity="0.04"/>
+              <stop offset="33%" stop-color="#e11d48" stop-opacity="0.04"/>
+              <stop offset="66%" stop-color="#0d9488" stop-opacity="0.04"/>
+              <stop offset="100%" stop-color="#0d9488" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="720" height="210" rx="8" fill="url(#gCompare)"/>
+
+          <!-- COLUMN 1: Boundary -->
+          <rect x="10" y="10" width="220" height="190" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1" stroke-opacity="0.3"/>
+          <text x="120" y="28" text-anchor="middle" font-size="9" fill="#2563eb" font-weight="600">Boundary Details</text>
+          <text x="120" y="42" text-anchor="middle" font-size="7" fill="#8a8578">"Where am I in the coverage shape?"</text>
+          <!-- Big blob boundary -->
+          <path d="M40,120 C30,90 60,60 120,55 C180,50 200,80 195,110 C190,140 150,160 120,158 C80,156 50,145 40,120Z" fill="rgba(37,99,235,0.06)" stroke="#2563eb" stroke-width="1.2" stroke-dasharray="5,3"/>
+          <text x="120" y="100" text-anchor="middle" font-size="7" fill="#2563eb" opacity="0.5">~50 km² boundary</text>
+          <text x="120" y="112" text-anchor="middle" font-size="7" fill="#2563eb" opacity="0.5">1 SE for entire blob</text>
+          <circle cx="150" cy="90" r="4" fill="#7c3aed"/>
+          <line x1="150" y1="90" x2="190" y2="105" stroke="#2563eb" stroke-width="0.8" stroke-dasharray="2,2"/>
+          <text x="120" y="178" text-anchor="middle" font-size="7" fill="#2563eb">Geometric: dist_edge, depth</text>
+          <text x="120" y="190" text-anchor="middle" font-size="7" fill="#8a8578">No local conversion signal</text>
+
+          <!-- COLUMN 2: Contested -->
+          <rect x="245" y="10" width="220" height="190" rx="6" fill="#fff" stroke="#e11d48" stroke-width="1" stroke-opacity="0.3"/>
+          <text x="355" y="28" text-anchor="middle" font-size="9" fill="#e11d48" font-weight="600">Contested Metrics</text>
+          <text x="355" y="42" text-anchor="middle" font-size="7" fill="#8a8578">"How does the overlap zone perform?"</text>
+          <!-- Two overlapping blobs -->
+          <ellipse cx="330" cy="100" rx="60" ry="40" fill="rgba(37,99,235,0.05)" stroke="#2563eb" stroke-width="0.8" stroke-dasharray="3,2"/>
+          <ellipse cx="380" cy="100" rx="60" ry="40" fill="rgba(217,119,6,0.05)" stroke="#d97706" stroke-width="0.8" stroke-dasharray="3,2"/>
+          <ellipse cx="355" cy="100" rx="22" ry="32" fill="rgba(225,29,72,0.1)" stroke="#e11d48" stroke-width="1.2"/>
+          <text x="355" y="98" text-anchor="middle" font-size="7" fill="#e11d48">∩ zone</text>
+          <text x="355" y="110" text-anchor="middle" font-size="6" fill="#e11d48" opacity="0.7">1 SE for ∩</text>
+          <circle cx="355" cy="85" r="3" fill="#7c3aed"/>
+          <text x="355" y="178" text-anchor="middle" font-size="7" fill="#e11d48">Only exists when ≥2 partners overlap</text>
+          <text x="355" y="190" text-anchor="middle" font-size="7" fill="#8a8578">No per-partner breakdown</text>
+
+          <!-- COLUMN 3: Hex Consensus -->
+          <rect x="480" y="10" width="230" height="190" rx="6" fill="#fff" stroke="#0d9488" stroke-width="1" stroke-opacity="0.3"/>
+          <text x="595" y="28" text-anchor="middle" font-size="9" fill="#0d9488" font-weight="600">Hex Consensus</text>
+          <text x="595" y="42" text-anchor="middle" font-size="7" fill="#8a8578">"What's the local conversion rate here?"</text>
+          <!-- Fine hex grid -->
+          <polygon points="560,68 572,60 584,68 584,84 572,92 560,84" fill="rgba(22,163,74,0.12)" stroke="#16a34a" stroke-width="1"/>
+          <text x="572" y="79" text-anchor="middle" font-size="6" fill="#16a34a">0.42</text>
+          <polygon points="584,84 596,76 608,84 608,100 596,108 584,100" fill="rgba(217,119,6,0.1)" stroke="#d97706" stroke-width="1"/>
+          <text x="596" y="95" text-anchor="middle" font-size="6" fill="#d97706">0.31</text>
+          <polygon points="536,84 548,76 560,84 560,100 548,108 536,100" fill="rgba(37,99,235,0.1)" stroke="#2563eb" stroke-width="1"/>
+          <text x="548" y="95" text-anchor="middle" font-size="6" fill="#2563eb">0.55</text>
+          <polygon points="560,100 572,92 584,100 584,116 572,124 560,116" fill="rgba(124,58,237,0.06)" stroke="#0d9488" stroke-width="0.8" opacity="0.4"/>
+          <text x="572" y="111" text-anchor="middle" font-size="6" fill="#0d9488" opacity="0.6">0.38</text>
+          <!-- more faint hexes for context -->
+          <polygon points="584,68 596,60 608,68 608,84 596,92 584,84" fill="rgba(0,0,0,0.02)" stroke="#0d9488" stroke-width="0.5" opacity="0.3"/>
+          <polygon points="536,68 548,60 560,68 560,84 548,92 536,84" fill="rgba(0,0,0,0.02)" stroke="#0d9488" stroke-width="0.5" opacity="0.3"/>
+          <polygon points="608,84 620,76 632,84 632,100 620,108 608,100" fill="rgba(0,0,0,0.02)" stroke="#0d9488" stroke-width="0.5" opacity="0.3"/>
+          <circle cx="572" cy="92" r="4" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+
+          <text x="595" y="142" text-anchor="middle" font-size="7" fill="#0d9488">Per-partner SE at ~0.5 km² resolution</text>
+          <text x="595" y="154" text-anchor="middle" font-size="7" fill="#0d9488">Shrinkage dampens low-evidence</text>
+          <text x="595" y="166" text-anchor="middle" font-size="7" fill="#0d9488">Color signal (green/orange/crimson)</text>
+          <text x="595" y="178" text-anchor="middle" font-size="7" fill="#0d9488">Hop features = neighbourhood context</text>
+          <text x="595" y="190" text-anchor="middle" font-size="7" fill="#0d9488" font-weight="600">Works even with 1 partner</text>
+        </svg>
+
+        <div class="intuition intuition-teal" style="padding-left: 16px; margin-top: 0;">
+          <div style="display:flex; align-items: flex-start; gap: 10px;">
+            <span style="font-size: 15px; margin-top: -1px;">📐</span>
+            <div>
+              <strong>Concrete example of why all three matter:</strong><br>
+              A lead sits 200m from the boundary edge (boundary says: risky, near_edge=1), in an overlap zone with contested_se=0.35 (contested says: the shared zone is mediocre). But the specific hex covering it from Partner C has SE=0.55 with 300 decisions, and its hop-1 neighbours average 0.48 (hex says: actually this micro-area is strong, and the neighbourhood confirms it). Without hex consensus, you'd miss this — boundary features only see the macro shape, contested only sees the overlap zone's aggregate, neither gives you the <strong>per-partner, fine-grained, statistically-shrunk conversion rate</strong> at the exact grid cell level. That's what drives allocation: which partner has the best local track record <em>here</em>.
+            </div>
+          </div>
+        </div>
+
+        <svg class="viz" width="100%" height="180" viewBox="0 0 360 180" style="margin: 10px 0 6px;">
+          <defs>
+            <linearGradient id="gTeal" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#0d9488" stop-opacity="0.06"/>
+              <stop offset="100%" stop-color="#0d9488" stop-opacity="0.01"/>
+            </linearGradient>
+            <pattern id="hexGrid" x="0" y="0" width="52" height="60" patternUnits="userSpaceOnUse">
+              <polygon points="26,0 52,15 52,45 26,60 0,45 0,15" fill="none" stroke="#0d9488" stroke-width="0.6" stroke-opacity="0.12"/>
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width="360" height="180" rx="8" fill="url(#gTeal)"/>
+          <rect x="0" y="0" width="360" height="180" rx="8" fill="url(#hexGrid)"/>
+          <polygon points="156,30 182,15 208,30 208,60 182,75 156,60" fill="rgba(22,163,74,0.12)" stroke="#16a34a" stroke-width="1.5"/>
+          <text x="182" y="52" text-anchor="middle" font-size="7" fill="#16a34a">SE=0.42</text>
+          <text x="182" y="42" text-anchor="middle" font-size="6" fill="#16a34a" opacity="0.6">Partner A</text>
+          <polygon points="182,75 208,60 234,75 234,105 208,120 182,105" fill="rgba(217,119,6,0.1)" stroke="#d97706" stroke-width="1.5"/>
+          <text x="208" y="97" text-anchor="middle" font-size="7" fill="#d97706">SE=0.31</text>
+          <text x="208" y="87" text-anchor="middle" font-size="6" fill="#d97706" opacity="0.6">Partner B</text>
+          <polygon points="130,75 156,60 182,75 182,105 156,120 130,105" fill="rgba(37,99,235,0.1)" stroke="#2563eb" stroke-width="1.5"/>
+          <text x="156" y="97" text-anchor="middle" font-size="7" fill="#2563eb">SE=0.55</text>
+          <text x="156" y="87" text-anchor="middle" font-size="6" fill="#2563eb" opacity="0.6">Partner C</text>
+          <circle cx="182" cy="80" r="6" fill="#7c3aed" stroke="#fff" stroke-width="2"/>
+          <text x="195" y="78" font-size="8" fill="#7c3aed" font-weight="600">target</text>
+          <line x1="250" y1="60" x2="250" y2="130" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arrTeal)"/>
+          <defs><marker id="arrTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#0d9488"/></marker></defs>
+          <text x="252" y="56" font-size="7" fill="#0d9488" font-weight="600">consensus</text>
+          <rect x="236" y="134" width="110" height="36" rx="4" fill="#fff" stroke="#0d9488" stroke-width="1"/>
+          <text x="291" y="150" text-anchor="middle" font-size="7" fill="#0d9488">weighted_se_shrunk</text>
+          <text x="291" y="162" text-anchor="middle" font-size="7" fill="#0d9488">parent_color</text>
+        </svg>
+
+        <div class="code-block" data-file="get_parent_hexagon — shrinkage + consensus">
+<pre><span class="cm"># A.3: Asymmetric credibility shrinkage</span>
+<span class="cm"># Low-evidence hexes get pulled toward zero (conservative)</span>
+<span class="cm"># Negative SE gets amplified (penalize bad areas more)</span>
+ratio = np.maximum(
+    config.<span class="vr">MIN_SHRINKAGE_RATIO</span>,
+    joined[<span class="st">"total"</span>] / (joined[<span class="st">"total"</span>] + config.<span class="vr">SHRINKAGE_K</span>)
+)
+joined[<span class="st">"se_shrunk"</span>] = np.where(
+    joined[<span class="st">"se"</span>] >= <span class="nb">0</span>,
+    joined[<span class="st">"se"</span>] * ratio,    <span class="cm"># positive: dampen</span>
+    joined[<span class="st">"se"</span>] / ratio,    <span class="cm"># negative: amplify</span>
+)
+
+<span class="cm"># A.4: Evidence-weighted intermediate for consensus</span>
+joined[<span class="st">"install_shrunk"</span>] = joined[<span class="st">"se_shrunk"</span>] * joined[<span class="st">"total"</span>]
+
+<span class="cm"># A.5: Mobile-level groupby → divide back by total</span>
+consensus[<span class="st">"weighted_se_shrunk"</span>] = (
+    consensus[<span class="st">"install_shrunk"</span>] / consensus[<span class="st">"total"</span>]
+)</pre>
+        </div>
+
+        <div class="intuition intuition-teal" style="margin-top: 10px;">
+          <strong>Shrink then aggregate</strong> — Shrinkage happens per-hex <em>before</em> the consensus groupby. This ensures a hex with 5 decisions can't dominate over one with 500. The ratio is <code>total / (total + K)</code>: if K=100 and a hex has 10 decisions, its SE gets multiplied by 0.09. A hex with 1000 decisions keeps ~0.91 of its SE. Asymmetry means bad areas get amplified — cautious by design.
+        </div>
+
+        <div class="code-block" data-file="get_parent_hexagon — color consensus">
+<pre><span class="cm"># Color: lightgreen=3, orange/indeterminate=2, crimson=1</span>
+<span class="cm"># Indeterminate override: green hex with ≤ N installs → indet</span>
+indeterminate_mask = (
+    (joined[<span class="st">"color"</span>] == <span class="st">"lightgreen"</span>) &
+    (joined[<span class="st">"installs"</span>] &lt;= config.<span class="vr">INDETERMINATE_INSTALLS_CUTOFF</span>)
+)
+joined.loc[indeterminate_mask, <span class="st">"color_adj"</span>] = <span class="st">"indeterminate"</span>
+
+<span class="cm"># Weighted color → numeric parent_color</span>
+consensus[<span class="st">"parent_color_numeric"</span>] = (
+    consensus[<span class="st">"_sum_w_color"</span>] / total_safe
+)
+<span class="cm"># ≥2.5 → lightgreen, ≥1.5 → orange, else crimson</span></pre>
+        </div>
+
+        <div class="io-row">
+          <span class="io-tag out">weighted_se_shrunk</span>
+          <span class="io-tag out">parent_color</span>
+          <span class="io-tag out">dist_to_boundary_edge_point_hex</span>
+          <span class="io-tag out">n_covering_partners</span>
+        </div>
+
+        <div class="data-section">
+          <div class="data-section-title" style="color:var(--accent-teal);">
+            <span class="arrow-tag arrow-out">OUTPUT</span> hex_consensus — 10 rows at mobile level
+          </div>
+          <div class="df-wrap">
+            <table>
+              <tr><th>mobile</th><th>weighted<br>_se</th><th>weighted<br>_se_shrunk</th><th>parent<br>_color</th><th>n_covering<br>_partners</th><th>total</th><th>installs</th><th>dist_to_edge<br>_point_hex</th><th>dist_to_center<br>_point_hex</th><th>depth_score<br>_point_hex</th></tr>
+              <tr><td class="col-key">M001</td><td class="col-se">0.4200</td><td class="col-se">0.3780</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>180</td><td>76</td><td class="col-geo">185</td><td class="col-geo">240</td><td>55</td></tr>
+              <tr><td class="col-key">M002</td><td class="col-se hi">0.4707</td><td class="col-se hi">0.4350</td><td style="color:#16a34a">lightgreen</td><td>2</td><td>315</td><td>145</td><td class="col-geo">120</td><td class="col-geo">310</td><td>190</td></tr>
+              <tr><td class="col-key">M003</td><td class="col-se lo">0.2889</td><td class="col-se lo">0.1880</td><td style="color:#d97706">orange</td><td>1</td><td>45</td><td>13</td><td class="col-geo">60</td><td class="col-geo">380</td><td class="lo">−320</td></tr>
+              <tr><td class="col-key">M004</td><td class="col-se">0.4220</td><td class="col-se">0.3910</td><td style="color:#d97706">orange</td><td>3</td><td>310</td><td>126</td><td class="col-geo">210</td><td class="col-geo">270</td><td>60</td></tr>
+              <tr><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M006</td><td class="col-se hi">0.5100</td><td class="col-se hi">0.4780</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>220</td><td>112</td><td class="col-geo">290</td><td class="col-geo">200</td><td>90</td></tr>
+              <tr><td class="col-key">M007</td><td class="col-se">0.3833</td><td class="col-se">0.3160</td><td style="color:#d97706">orange</td><td>2</td><td>225</td><td>81</td><td class="col-geo">95</td><td class="col-geo">340</td><td class="lo">−245</td></tr>
+              <tr><td class="col-key">M008</td><td class="col-se">0.4200</td><td class="col-se">0.3780</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>180</td><td>76</td><td class="col-geo">320</td><td class="col-geo">150</td><td class="hi">170</td></tr>
+              <tr><td class="col-key">M009</td><td class="col-se">0.4464</td><td class="col-se">0.4120</td><td style="color:#16a34a">lightgreen</td><td>2</td><td>280</td><td>121</td><td class="col-geo">175</td><td class="col-geo">250</td><td>75</td></tr>
+              <tr><td class="col-key">M010</td><td class="col-se lo">0.2200</td><td class="col-se lo">0.0860</td><td style="color:#e11d48">crimson</td><td>1</td><td>30</td><td>7</td><td class="col-geo">45</td><td class="col-geo">410</td><td class="lo">−365</td></tr>
+            </table>
+          </div>
+
+          <div class="df-wrap">
+            <caption>… continued: hop features at mobile level (consensus from covering hexes)</caption>
+            <table>
+              <tr><th>mobile</th><th>hop1_se<br>_wmean</th><th>hop1_se<br>_std</th><th>hop2_se<br>_wmean</th><th>hop2_se<br>_std</th><th>hop3_se<br>_wmean</th><th>hop3_se<br>_std</th><th>se_gradient<br>_1to3</th><th>se<br>_confirmed</th><th>isolation<br>_ratio</th></tr>
+              <tr><td class="col-key">M001</td><td class="col-hop">0.390</td><td>0.08</td><td class="col-hop">0.360</td><td>0.12</td><td class="col-hop">0.340</td><td>0.15</td><td class="col-hop">−0.050</td><td>0.82</td><td>0.15</td></tr>
+              <tr><td class="col-key">M002</td><td class="col-hop hi">0.450</td><td>0.06</td><td class="col-hop hi">0.430</td><td>0.09</td><td class="col-hop hi">0.400</td><td>0.11</td><td class="col-hop">−0.050</td><td>0.90</td><td>0.08</td></tr>
+              <tr><td class="col-key">M003</td><td class="col-hop lo">0.250</td><td>0.14</td><td class="col-hop lo">0.280</td><td>0.18</td><td class="col-hop">0.310</td><td>0.20</td><td class="col-hop hi">+0.060</td><td>0.55</td><td>0.45</td></tr>
+              <tr><td class="col-key">M004</td><td class="col-hop">0.400</td><td>0.10</td><td class="col-hop">0.380</td><td>0.13</td><td class="col-hop">0.350</td><td>0.16</td><td class="col-hop">−0.050</td><td>0.78</td><td>0.12</td></tr>
+              <tr><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+              <tr><td class="col-key">M006</td><td class="col-hop hi">0.480</td><td>0.05</td><td class="col-hop hi">0.460</td><td>0.07</td><td class="col-hop hi">0.420</td><td>0.10</td><td class="col-hop">−0.060</td><td>0.92</td><td>0.06</td></tr>
+              <tr><td class="col-key">M007</td><td class="col-hop">0.350</td><td>0.11</td><td class="col-hop">0.330</td><td>0.14</td><td class="col-hop">0.300</td><td>0.17</td><td class="col-hop">−0.050</td><td>0.70</td><td>0.22</td></tr>
+              <tr><td class="col-key">M008</td><td class="col-hop">0.390</td><td>0.08</td><td class="col-hop">0.370</td><td>0.11</td><td class="col-hop">0.340</td><td>0.13</td><td class="col-hop">−0.050</td><td>0.85</td><td>0.13</td></tr>
+              <tr><td class="col-key">M009</td><td class="col-hop">0.420</td><td>0.07</td><td class="col-hop">0.400</td><td>0.10</td><td class="col-hop">0.370</td><td>0.12</td><td class="col-hop">−0.050</td><td>0.88</td><td>0.09</td></tr>
+              <tr><td class="col-key">M010</td><td class="col-hop lo">0.200</td><td>0.19</td><td class="col-hop lo">0.230</td><td>0.22</td><td class="col-hop lo">0.260</td><td>0.24</td><td class="col-hop hi">+0.060</td><td>0.40</td><td class="lo">0.65</td></tr>
+            </table>
+          </div>
+          <div class="intuition intuition-teal" style="font-size: 11.5px; margin-top:4px;">
+            <strong>Read the data:</strong> Notice shrinkage in action — M003 has raw SE=0.289 but only 45 decisions, so <code>weighted_se_shrunk</code> drops to 0.188. M010 is even more extreme: SE=0.22 with only 30 decisions → shrunk to 0.086. Compare with M006: SE=0.51 with 220 decisions → barely shrunk to 0.478. M003 and M010 have <strong>positive gradients</strong> (+0.06) meaning neighbours are <em>better</em> than the hex itself — it's a local cold spot. Their isolation_ratio is high (0.45, 0.65) confirming they're outliers. M006 has the lowest isolation_ratio (0.06) — consistent with its neighbourhood.
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <!-- ─── HOP FEATURES ─── -->
+      <div class="node c-green" style="animation-delay:0.2s">
+        <div class="node-label">SUB-CALL — HOP FEATURES</div>
+        <div class="node-title">compute_hop_features()</div>
+
+        <div class="intuition intuition-green">
+          <strong>Core question:</strong> "What do the <em>neighbours</em> of this hex look like?" — A hex might have SE=0.5, but if all its neighbours have SE=0.1, it's an island of success about to regress. Hop features capture this <strong>spatial context</strong> via 3 concentric rings of neighbours, weighted by inverse distance. The gradient (hop1 → hop3) tells you if performance decays or improves as you move outward.
+        </div>
+
+        <svg class="viz" width="100%" height="130" viewBox="0 0 340 130" style="margin: 10px 0 6px;">
+          <defs>
+            <linearGradient id="gGreen" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#16a34a" stop-opacity="0.05"/>
+              <stop offset="100%" stop-color="#16a34a" stop-opacity="0.01"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="340" height="130" rx="8" fill="url(#gGreen)"/>
+          <circle cx="140" cy="65" r="52" fill="none" stroke="#16a34a" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.3"/>
+          <text x="194" y="30" font-size="7" fill="#16a34a" opacity="0.5">hop 3</text>
+          <circle cx="140" cy="65" r="36" fill="none" stroke="#16a34a" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+          <text x="178" y="44" font-size="7" fill="#16a34a" opacity="0.6">hop 2</text>
+          <circle cx="140" cy="65" r="20" fill="rgba(22,163,74,0.06)" stroke="#16a34a" stroke-width="1.2" opacity="0.7"/>
+          <text x="162" y="56" font-size="7" fill="#16a34a" opacity="0.8">hop 1</text>
+          <polygon points="140,53 148,57 148,65 140,69 132,65 132,57" fill="rgba(22,163,74,0.2)" stroke="#16a34a" stroke-width="1.5"/>
+          <polygon points="148,41 156,45 156,53 148,57 140,53 140,45" fill="rgba(22,163,74,0.08)" stroke="#16a34a" stroke-width="0.8" opacity="0.7"/>
+          <polygon points="148,65 156,69 156,77 148,81 140,77 140,69" fill="rgba(22,163,74,0.08)" stroke="#16a34a" stroke-width="0.8" opacity="0.7"/>
+          <polygon points="132,41 140,45 140,53 132,57 124,53 124,45" fill="rgba(22,163,74,0.08)" stroke="#16a34a" stroke-width="0.8" opacity="0.7"/>
+          <polygon points="132,65 140,69 140,77 132,81 124,77 124,69" fill="rgba(22,163,74,0.08)" stroke="#16a34a" stroke-width="0.8" opacity="0.7"/>
+          <polygon points="156,29 164,33 164,41 156,45 148,41 148,33" fill="rgba(22,163,74,0.04)" stroke="#16a34a" stroke-width="0.6" opacity="0.5"/>
+          <polygon points="156,77 164,81 164,89 156,93 148,89 148,81" fill="rgba(22,163,74,0.04)" stroke="#16a34a" stroke-width="0.6" opacity="0.5"/>
+          <polygon points="116,53 124,57 124,65 116,69 108,65 108,57" fill="rgba(22,163,74,0.04)" stroke="#16a34a" stroke-width="0.6" opacity="0.5"/>
+          <polygon points="164,53 172,57 172,65 164,69 156,65 156,57" fill="rgba(22,163,74,0.04)" stroke="#16a34a" stroke-width="0.6" opacity="0.5"/>
+          <text x="220" y="42" font-size="8" fill="#16a34a" font-weight="600">BallTree</text>
+          <text x="220" y="54" font-size="7" fill="#8a8578">3 hops, distance-weighted</text>
+          <text x="220" y="70" font-size="7" fill="#16a34a">→ hop{n}_se_wmean</text>
+          <text x="220" y="82" font-size="7" fill="#16a34a">→ hop{n}_se_std</text>
+          <text x="220" y="94" font-size="7" fill="#16a34a">→ se_gradient_1to3</text>
+          <text x="220" y="106" font-size="7" fill="#16a34a">→ isolation_ratio</text>
+        </svg>
+
+        <div class="code-block" data-file="get_parent_hexagon — hop merge + consensus">
+<pre><span class="cm"># Hop features are computed externally, merged at hex level</span>
+df_hop = <span class="fn">compute_hop_features</span>(df_poly, n_hops=<span class="nb">3</span>)
+joined = joined.merge(df_hop, on=[<span class="st">"partner_id"</span>, <span class="st">"poly_id"</span>])
+
+<span class="cm"># Hop consensus: total-weighted intermediates</span>
+<span class="kw">for</span> h <span class="kw">in</span> [<span class="nb">1</span>, <span class="nb">2</span>, <span class="nb">3</span>]:
+    joined[f<span class="st">"_w_hop{h}_wmean"</span>] = (
+        joined[f<span class="st">"hop{h}_se_wmean"</span>] * joined[<span class="st">"total"</span>]
+    )
+
+<span class="cm"># After groupby: divide sums by total for consensus</span>
+consensus[f<span class="st">"hop{h}_se_wmean"</span>] = (
+    consensus[f<span class="st">"_w_hop{h}"</span>] / total_safe
+)</pre>
+        </div>
+
+        <div class="io-row">
+          <span class="io-tag out">hop1–3_se_wmean</span>
+          <span class="io-tag out">hop1–3_se_std</span>
+          <span class="io-tag out">se_gradient_1to3</span>
+          <span class="io-tag out">isolation_ratio</span>
+        </div>
+
+        <div class="data-section">
+          <div class="data-section-title" style="color:var(--accent-green);">
+            <span class="arrow-tag arrow-out">OUTPUT</span> df_hop — at (partner_id, poly_id) level, showing same 8 hexes
+          </div>
+          <div class="df-wrap">
+            <table>
+              <tr><th>partner_id</th><th>poly_id</th><th>hop1_se<br>_wmean</th><th>hop1<br>_count</th><th>hop1_se<br>_std</th><th>hop2_se<br>_wmean</th><th>hop2<br>_count</th><th>hop2_se<br>_std</th><th>hop3_se<br>_wmean</th><th>hop3<br>_count</th><th>hop3_se<br>_std</th><th>se_gradient<br>_1to3</th><th>se<br>_confirmed</th><th>isolation<br>_ratio</th></tr>
+              <tr><td>P1</td><td>hex_01</td><td class="col-hop">0.390</td><td>5</td><td>0.08</td><td class="col-hop">0.360</td><td>12</td><td>0.12</td><td class="col-hop">0.340</td><td>24</td><td>0.15</td><td>−0.050</td><td>0.82</td><td>0.15</td></tr>
+              <tr><td>P1</td><td>hex_02</td><td class="col-hop">0.380</td><td>4</td><td>0.09</td><td class="col-hop">0.400</td><td>10</td><td>0.11</td><td class="col-hop">0.380</td><td>22</td><td>0.14</td><td>0.000</td><td>0.78</td><td>0.10</td></tr>
+              <tr><td>P1</td><td>hex_03</td><td class="col-hop lo">0.250</td><td>3</td><td>0.14</td><td class="col-hop">0.280</td><td>8</td><td>0.18</td><td class="col-hop">0.310</td><td>18</td><td>0.20</td><td class="hi">+0.060</td><td>0.55</td><td class="lo">0.45</td></tr>
+              <tr><td>P2</td><td>hex_04</td><td class="col-hop hi">0.480</td><td>6</td><td>0.05</td><td class="col-hop hi">0.460</td><td>14</td><td>0.07</td><td class="col-hop hi">0.420</td><td>28</td><td>0.10</td><td>−0.060</td><td>0.92</td><td>0.06</td></tr>
+              <tr><td>P2</td><td>hex_05</td><td class="col-hop">0.410</td><td>4</td><td>0.10</td><td class="col-hop">0.390</td><td>11</td><td>0.13</td><td class="col-hop">0.370</td><td>20</td><td>0.15</td><td>−0.040</td><td>0.75</td><td>0.18</td></tr>
+              <tr><td>P3</td><td>hex_06</td><td class="col-hop lo">0.200</td><td>2</td><td>0.19</td><td class="col-hop lo">0.230</td><td>6</td><td>0.22</td><td class="col-hop lo">0.260</td><td>14</td><td>0.24</td><td class="hi">+0.060</td><td>0.40</td><td class="lo">0.65</td></tr>
+              <tr><td>P3</td><td>hex_07</td><td class="col-hop">0.400</td><td>5</td><td>0.07</td><td class="col-hop">0.380</td><td>12</td><td>0.09</td><td class="col-hop">0.360</td><td>26</td><td>0.12</td><td>−0.040</td><td>0.85</td><td>0.10</td></tr>
+              <tr><td>P3</td><td>hex_08</td><td class="col-hop lo">0.180</td><td>1</td><td>0.25</td><td class="col-hop lo">0.210</td><td>4</td><td>0.28</td><td class="col-hop lo">0.250</td><td>10</td><td>0.30</td><td class="hi">+0.070</td><td>0.35</td><td class="lo">0.72</td></tr>
+            </table>
+          </div>
+          <div class="intuition intuition-green" style="font-size: 11.5px; margin-top:4px;">
+            <strong>Read the data:</strong> P2/hex_04 is the strongest hex — its hop1 neighbours average 0.48 and the gradient is −0.06 (performance slightly <em>decreasing</em> outward, meaning the hex is a local peak). P3/hex_06 and hex_08 are weak with <em>positive</em> gradients — their neighbours are actually better than them, and isolation_ratio is 0.65–0.72 (very isolated). These hop features get merged at the (partner_id, poly_id) level into the joined table before the mobile-level consensus groupby.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"></div>
+  <div class="merge-label">── MERGE: df_target LEFT JOIN boundary LEFT JOIN hex_consensus ──</div>
+  <div class="connector"></div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- ALL-HEX COMBINED FIELD                           -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="node c-amber" style="animation-delay:0.25s">
+    <div class="node-label">ALL-HEX COMBINED FIELD</div>
+    <div class="node-title">Per-hex Gaussian Field → Mobile Aggregation</div>
+
+    <div class="intuition intuition-amber">
+      <strong>Core question:</strong> "What's the local <em>sentiment</em> around this lead — are nearby historical decisions positive or negative?" — Unlike SE (which is a hex-level ratio), the <strong>Gaussian field</strong> is a continuous, spatially-smooth surface. It accounts for the <em>exact distance</em> to each historical decision point and <em>how recent</em> that decision was. By computing it per-hex and then aggregating, we get a field value that reflects <em>all</em> partners who cover this location — not just the best or worst one.
+    </div>
+
+    <svg class="viz" width="100%" height="150" viewBox="0 0 700 150" style="margin: 10px 0 6px;">
+      <defs>
+        <linearGradient id="gAmber" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#d97706" stop-opacity="0.06"/>
+          <stop offset="100%" stop-color="#d97706" stop-opacity="0.01"/>
+        </linearGradient>
+        <radialGradient id="kde1" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ea580c" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="kde2" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ea580c" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="700" height="150" rx="8" fill="url(#gAmber)"/>
+      <g transform="translate(30,10)">
+        <polygon points="60,10 100,0 140,10 140,50 100,60 60,50" fill="rgba(22,163,74,0.05)" stroke="#16a34a" stroke-width="1"/>
+        <text x="100" y="72" text-anchor="middle" font-size="7" fill="#16a34a">Partner A, hex_7</text>
+        <circle cx="85" cy="28" r="18" fill="url(#kde1)"/>
+        <circle cx="115" cy="35" r="14" fill="url(#kde2)"/>
+        <circle cx="82" cy="25" r="2" fill="#ea580c" opacity="0.7"/>
+        <circle cx="90" cy="32" r="2" fill="#ea580c" opacity="0.5"/>
+        <circle cx="110" cy="30" r="2" fill="#ea580c" opacity="0.6"/>
+        <circle cx="120" cy="38" r="2" fill="#ea580c" opacity="0.4"/>
+        <circle cx="100" cy="30" r="4" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+        <text x="100" y="88" text-anchor="middle" font-size="7" fill="#d97706">field = 0.62</text>
+      </g>
+      <g transform="translate(180,10)">
+        <polygon points="60,10 100,0 140,10 140,50 100,60 60,50" fill="rgba(37,99,235,0.05)" stroke="#2563eb" stroke-width="1"/>
+        <text x="100" y="72" text-anchor="middle" font-size="7" fill="#2563eb">Partner B, hex_3</text>
+        <circle cx="95" cy="32" r="16" fill="url(#kde2)"/>
+        <circle cx="75" cy="25" r="2" fill="#ea580c" opacity="0.5"/>
+        <circle cx="90" cy="28" r="2" fill="#ea580c" opacity="0.6"/>
+        <circle cx="100" cy="38" r="2" fill="#ea580c" opacity="0.4"/>
+        <circle cx="100" cy="30" r="4" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+        <text x="100" y="88" text-anchor="middle" font-size="7" fill="#d97706">field = 0.48</text>
+      </g>
+      <g transform="translate(330,10)">
+        <polygon points="60,10 100,0 140,10 140,50 100,60 60,50" fill="rgba(217,119,6,0.05)" stroke="#d97706" stroke-width="1"/>
+        <text x="100" y="72" text-anchor="middle" font-size="7" fill="#d97706">Partner C, hex_1</text>
+        <circle cx="105" cy="28" r="20" fill="url(#kde1)"/>
+        <circle cx="90" cy="22" r="2" fill="#ea580c" opacity="0.6"/>
+        <circle cx="100" cy="30" r="2" fill="#ea580c" opacity="0.7"/>
+        <circle cx="112" cy="25" r="2" fill="#ea580c" opacity="0.5"/>
+        <circle cx="108" cy="38" r="2" fill="#ea580c" opacity="0.5"/>
+        <circle cx="118" cy="30" r="2" fill="#ea580c" opacity="0.4"/>
+        <circle cx="100" cy="30" r="4" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+        <text x="100" y="88" text-anchor="middle" font-size="7" fill="#d97706">field = 0.71</text>
+      </g>
+      <line x1="505" y1="50" x2="530" y2="50" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+      <defs><marker id="arrAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#d97706"/></marker></defs>
+      <rect x="535" y="14" width="150" height="120" rx="8" fill="#fff" stroke="#d97706" stroke-width="1"/>
+      <text x="610" y="34" text-anchor="middle" font-size="8" fill="#d97706" font-weight="600">Mobile Aggregation</text>
+      <text x="548" y="52" font-size="7" fill="#8a8578">kswmean</text>
+      <text x="548" y="64" font-size="7" fill="#d97706">= Σ(f×ks)/Σ(ks)</text>
+      <text x="548" y="82" font-size="7" fill="#8a8578">wmean</text>
+      <text x="548" y="94" font-size="7" fill="#d97706">= Σ(f×n)/Σ(n)</text>
+      <text x="548" y="112" font-size="7" fill="#8a8578">+ mean, min, max, std</text>
+    </svg>
+
+    <div class="code-block" data-file="process — all-hex field orchestration">
+<pre><span class="cm"># sjoin targets to ALL hexes (not just best match)</span>
+all_joined = gpd.sjoin(gdf_target_pts, gdf_all_polys,
+                        how=<span class="st">"inner"</span>, predicate=<span class="st">"within"</span>)
+
+<span class="cm"># sjoin sources into their own partner's hexes</span>
+all_joined_src = gpd.sjoin(gdf_source_points, gdf_all_polys_for_src,
+                            how=<span class="st">"inner"</span>, predicate=<span class="st">"within"</span>)
+
+<span class="cm"># CRITICAL: no cross-partner leakage</span>
+all_joined_src = all_joined_src[
+    all_joined_src[<span class="st">"partner_id"</span>] == all_joined_src[<span class="st">"all_poly_partner_id"</span>]
+]
+
+<span class="cm"># Per-hex field computation → one KDE per (partner, poly)</span>
+<span class="kw">for</span> (pid, polyid), tgt_grp <span class="kw">in</span> all_hex_groups:
+    field_df = <span class="fn">compute_adaptive_gaussian_field</span>(
+        df_target=tgt_sub, df_source=src_local,
+        lambda_decay=lambda_decay, max_radius_m=max_radius_m
+    )
+
+<span class="cm"># Aggregate: kernel_sum-weighted mean across hexes</span>
+agg[<span class="st">"predicted_field_hex_all_kswmean"</span>] = (
+    agg[<span class="st">"_sum_ks_weighted_field"</span>] / agg[<span class="st">"_sum_kernel_sums"</span>]
+)</pre>
+    </div>
+
+    <div class="intuition intuition-amber" style="margin-top: 10px;">
+      <strong>Why kernel_sum-weighted?</strong> — <code>kernel_sum = Σ(k)</code> is how many nearby source points contributed to this hex's field estimate (weighted by spatial proximity). A hex where the target is surrounded by dense source data gets higher kernel_sum → more influence in the final consensus. This is analogous to precision-weighting: higher confidence estimates dominate.
+    </div>
+
+    <!-- Nested KDE engine -->
+    <div style="margin: 16px 0 0 24px;">
+      <div class="node c-orange" style="margin-bottom: 0;">
+        <div class="node-label">INNER CALL — PER HEX GROUP</div>
+        <div class="node-title">compute_adaptive_gaussian_field()</div>
+
+        <svg class="viz" width="100%" height="100" viewBox="0 0 500 100" style="margin: 8px 0;">
+          <defs>
+            <linearGradient id="gOrange" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ea580c" stop-opacity="0.06"/>
+              <stop offset="100%" stop-color="#ea580c" stop-opacity="0.01"/>
+            </linearGradient>
+            <radialGradient id="kdeMain" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ea580c" stop-opacity="0.3"/>
+              <stop offset="60%" stop-color="#ea580c" stop-opacity="0.1"/>
+              <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect x="0" y="0" width="500" height="100" rx="6" fill="url(#gOrange)"/>
+          <circle cx="120" cy="50" r="40" fill="none" stroke="#ea580c" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+          <text x="120" y="96" text-anchor="middle" font-size="6" fill="#8a8578">max_radius</text>
+          <circle cx="120" cy="50" r="5" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="100" cy="38" r="12" fill="url(#kdeMain)"/>
+          <circle cx="100" cy="38" r="2.5" fill="#ea580c"/>
+          <circle cx="138" cy="42" r="10" fill="url(#kdeMain)"/>
+          <circle cx="138" cy="42" r="2.5" fill="#ea580c"/>
+          <circle cx="110" cy="65" r="8" fill="url(#kdeMain)"/>
+          <circle cx="110" cy="65" r="2.5" fill="#ea580c" opacity="0.5"/>
+          <circle cx="135" cy="62" r="9" fill="url(#kdeMain)"/>
+          <circle cx="135" cy="62" r="2.5" fill="#ea580c" opacity="0.6"/>
+          <text x="210" y="28" font-size="9" fill="#ea580c" font-weight="600">Adaptive Gaussian KDE</text>
+          <text x="210" y="44" font-size="8" fill="#2c2a26">spatial:  k = exp(-0.5 × d²/h²)</text>
+          <text x="210" y="58" font-size="8" fill="#2c2a26">temporal: w = exp(-λ × age_days)</text>
+          <text x="210" y="72" font-size="8" fill="#2c2a26">causal:  only past observations</text>
+          <text x="210" y="90" font-size="8" fill="#ea580c" font-weight="600">field = Σ(k·w·fw) / Σ(k)</text>
+        </svg>
+
+        <div class="code-block" data-file="compute_adaptive_gaussian_field">
+<pre>source_coords_rad = np.radians(df_source[[<span class="st">"latitude"</span>, <span class="st">"longitude"</span>]])
+tree = <span class="fn">BallTree</span>(source_coords_rad, metric=<span class="st">"haversine"</span>)
+
+<span class="kw">for</span> i, (target_coord, eval_time) <span class="kw">in</span> <span class="fn">enumerate</span>(...):
+    <span class="cm"># Radius query: O(1) memory per target</span>
+    indices, dist_rad = tree.query_radius(
+        target_coord, r=radius_rad, return_distance=<span class="nb">True</span>
+    )
+    dist_m = dist_rad[<span class="nb">0</span>] * <span class="vr">EARTH_RADIUS_M</span>
+
+    <span class="cm"># Causal: only use past observations</span>
+    ages_days = (eval_time - neigh_times) / np.timedelta64(<span class="nb">1</span>, <span class="st">"D"</span>)
+    time_weights[past_mask] = np.exp(-<span class="vr">lambda_decay</span> * ages_days[past_mask])
+
+    <span class="cm"># Adaptive bandwidth: each source has its own h</span>
+    kernel = np.exp(-<span class="nb">0.5</span> * (dist_m**<span class="nb">2</span>) / (neigh_h**<span class="nb">2</span>))
+
+    <span class="cm"># Weighted NW estimator</span>
+    predicted[i] = np.sum(kernel * effective_weights) / (np.sum(kernel) + <span class="nb">1e-12</span>)
+    kernel_sums[i] = np.sum(kernel)  <span class="cm"># confidence measure</span></pre>
+        </div>
+
+        <div class="intuition intuition-orange">
+          <strong>Adaptive bandwidth h</strong> — Each source point has its own bandwidth, unlike standard KDE with a single global h. In dense urban areas, h is small (tight influence radius). In sparse areas, h is large (spread influence further). This prevents over-smoothing in cities while still getting signal in thin areas. The <strong>causal mask</strong> ensures we never leak future information — the field at time T only sees decisions before T.
+        </div>
+
+        <div class="io-row">
+          <span class="io-tag out">predicted_field</span>
+          <span class="io-tag out">kernel_sum (confidence)</span>
+        </div>
+
+        <div class="data-section">
+          <div class="data-section-title" style="color:var(--accent-orange);">
+            <span class="arrow-tag arrow-out">OUTPUT</span> Per (mobile × hex) — before mobile-level aggregation (showing M002 across 2 hexes)
+          </div>
+          <div class="df-wrap">
+            <caption>Example: M002 sits inside P1/hex_02 and P2/hex_04 → KDE runs twice</caption>
+            <table>
+              <tr><th>mobile</th><th>_hex_partner</th><th>_hex_poly</th><th>_field_all</th><th>_n_sources</th><th>_kernel_sum</th></tr>
+              <tr><td class="col-key">M002</td><td>P1</td><td>hex_02</td><td class="col-field">0.3240</td><td>18</td><td>4.82</td></tr>
+              <tr><td class="col-key">M002</td><td>P2</td><td>hex_04</td><td class="col-field hi">0.5680</td><td>35</td><td>8.15</td></tr>
+            </table>
+          </div>
+          <div class="intuition intuition-orange" style="font-size: 11.5px; margin-top:4px;">
+            <strong>Read the data:</strong> The KDE for P1/hex_02 returns field=0.324 with kernel_sum=4.82 (moderate confidence — 18 source pts but spread out). P2/hex_04 returns field=0.568 with kernel_sum=8.15 (higher confidence — denser source coverage). When aggregated, the <strong>kswmean</strong> will weight P2's field more heavily: (0.324×4.82 + 0.568×8.15) / (4.82+8.15) = <strong>0.478</strong>. The unweighted mean would be 0.446 — kswmean correctly shifts toward the denser, higher-confidence estimate.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All-hex field mobile-level aggregation table -->
+    <div class="data-section" style="margin-top: 16px;">
+      <div class="data-section-title" style="color:var(--accent-amber);">
+        <span class="arrow-tag arrow-out">OUTPUT</span> agg_all_hex — mobile-level aggregation of per-hex Gaussian fields
+      </div>
+      <div class="df-wrap">
+        <table>
+          <tr><th>mobile</th><th>predicted_field<br>_hex_all_kswmean</th><th>predicted_field<br>_hex_all_wmean</th><th>predicted_field<br>_hex_all_mean</th><th>predicted_field<br>_hex_all_min</th><th>predicted_field<br>_hex_all_max</th><th>predicted_field<br>_hex_all_std</th><th>n_overlapping<br>_hexes_field</th><th>total_sources<br>_all_hexes</th></tr>
+          <tr><td class="col-key">M001</td><td class="col-amber">0.4150</td><td class="col-amber">0.4150</td><td class="col-amber">0.4150</td><td>0.4150</td><td>0.4150</td><td>0.000</td><td>1</td><td>22</td></tr>
+          <tr><td class="col-key">M002</td><td class="col-amber hi">0.4780</td><td class="col-amber">0.4460</td><td class="col-amber">0.4460</td><td>0.3240</td><td>0.5680</td><td>0.173</td><td>2</td><td>53</td></tr>
+          <tr><td class="col-key">M003</td><td class="col-amber lo">0.1820</td><td class="col-amber lo">0.1820</td><td class="col-amber lo">0.1820</td><td>0.1820</td><td>0.1820</td><td>0.000</td><td>1</td><td>8</td></tr>
+          <tr><td class="col-key">M004</td><td class="col-amber">0.3950</td><td class="col-amber">0.3780</td><td class="col-amber">0.3710</td><td>0.2100</td><td>0.5340</td><td>0.162</td><td>3</td><td>68</td></tr>
+          <tr><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M006</td><td class="col-amber hi">0.5410</td><td class="col-amber hi">0.5410</td><td class="col-amber hi">0.5410</td><td>0.5410</td><td>0.5410</td><td>0.000</td><td>1</td><td>42</td></tr>
+          <tr><td class="col-key">M007</td><td class="col-amber">0.3680</td><td class="col-amber">0.3520</td><td class="col-amber">0.3420</td><td>0.2450</td><td>0.4390</td><td>0.137</td><td>2</td><td>40</td></tr>
+          <tr><td class="col-key">M008</td><td class="col-amber">0.4280</td><td class="col-amber">0.4280</td><td class="col-amber">0.4280</td><td>0.4280</td><td>0.4280</td><td>0.000</td><td>1</td><td>25</td></tr>
+          <tr><td class="col-key">M009</td><td class="col-amber">0.4560</td><td class="col-amber">0.4380</td><td class="col-amber">0.4310</td><td>0.3580</td><td>0.5040</td><td>0.103</td><td>2</td><td>48</td></tr>
+          <tr><td class="col-key">M010</td><td class="col-amber lo">0.1250</td><td class="col-amber lo">0.1250</td><td class="col-amber lo">0.1250</td><td>0.1250</td><td>0.1250</td><td>0.000</td><td>1</td><td>5</td></tr>
+        </table>
+      </div>
+      <div class="intuition intuition-amber" style="font-size: 11.5px; margin-top:4px;">
+        <strong>Read the data:</strong> Single-hex leads (M001, M003, M006, M008, M010) have std=0 and all aggregation methods agree. Multi-hex leads diverge: M002 has kswmean=0.478 vs wmean=0.446 vs mean=0.446 — kswmean is highest because P2's field (0.568) had higher kernel_sum. M004 spans 3 hexes with large spread (min=0.21, max=0.534, std=0.162) — a genuinely uncertain location. M010's field=0.125 with only 5 total sources is the weakest signal in the dataset.
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"></div>
+  <div class="merge-label">── GEOMETRIC ENRICHMENT (step2_score_test.py, before process()) ──</div>
+  <div class="connector"></div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- GEOMETRIC FEATURES                               -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="node" style="animation-delay:0.3s; border-left: 3px solid #8b5cf6; background: linear-gradient(135deg, rgba(139,92,246,0.06) 0%, var(--surface) 40%);">
+    <div class="node-label" style="color:#8b5cf6;">GEOMETRIC PATTERN FEATURES</div>
+    <div class="node-title">batch_compute_geometry() + regime derivation</div>
+    <div class="node-desc">Runs <strong>outside</strong> <code>process()</code>, in <code>step2_score_test.py</code>. For each test lead, finds historical decision points within <code>GEOM_SEARCH_RADIUS_M</code> (100m) via BallTree, then computes shape descriptors (anisotropy, density, convex hull, spread) of that point cloud. Three logistic regime scores classify the local pattern — dense blob, linear gully, or sparse frontier. These features enrich <code>df_test</code> before it enters <code>process()</code>.</div>
+
+    <div class="intuition" style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.15); color: #4c1d95;">
+      <strong>Core question:</strong> "What does the <em>shape</em> of nearby history look like?" — Two leads with identical SE can differ wildly: one surrounded by a tight, round cluster of installs (dense blob — high confidence), the other along a narrow road with points only in a line (gully — uncertain perpendicular reach). This feature captures the <strong>geometric morphology</strong> of the local point cloud, which is invisible to SE, KDE fields, and boundary distances.
+    </div>
+
+    <svg class="viz" width="100%" height="190" viewBox="0 0 780 190" style="margin: 12px 0 8px;">
+      <defs>
+        <linearGradient id="gGeom" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.05"/>
+          <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.01"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="780" height="190" rx="8" fill="url(#gGeom)"/>
+
+      <!-- REGIME 1: Dense blob -->
+      <rect x="10" y="10" width="230" height="170" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="125" y="28" text-anchor="middle" font-size="9" fill="#16a34a" font-weight="600">Dense Blob</text>
+      <text x="125" y="40" text-anchor="middle" font-size="7" fill="#8a8578">anisotropy ≈ 0, high density</text>
+      <!-- search radius circle -->
+      <circle cx="125" cy="100" r="48" fill="none" stroke="#8b5cf6" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+      <text x="175" y="62" font-size="6" fill="#8b5cf6">100m radius</text>
+      <!-- dense cluster of points -->
+      <circle cx="118" cy="88" r="2.5" fill="#16a34a" opacity="0.7"/>
+      <circle cx="130" cy="92" r="2.5" fill="#16a34a" opacity="0.7"/>
+      <circle cx="124" cy="96" r="2.5" fill="#16a34a" opacity="0.6"/>
+      <circle cx="135" cy="85" r="2.5" fill="#16a34a" opacity="0.7"/>
+      <circle cx="112" cy="100" r="2.5" fill="#16a34a" opacity="0.6"/>
+      <circle cx="128" cy="105" r="2.5" fill="#16a34a" opacity="0.7"/>
+      <circle cx="140" cy="98" r="2.5" fill="#16a34a" opacity="0.6"/>
+      <circle cx="119" cy="108" r="2.5" fill="#16a34a" opacity="0.5"/>
+      <circle cx="132" cy="82" r="2.5" fill="#16a34a" opacity="0.6"/>
+      <circle cx="115" cy="93" r="2.5" fill="#16a34a" opacity="0.7"/>
+      <circle cx="126" cy="112" r="2.5" fill="#16a34a" opacity="0.5"/>
+      <circle cx="137" cy="107" r="2.5" fill="#16a34a" opacity="0.6"/>
+      <!-- convex hull -->
+      <path d="M112,88 L132,78 L142,85 L142,108 L137,114 L118,114 L110,102Z" fill="rgba(22,163,74,0.06)" stroke="#16a34a" stroke-width="0.8" stroke-dasharray="3,2"/>
+      <!-- target point -->
+      <circle cx="125" cy="97" r="4.5" fill="#8b5cf6" stroke="#fff" stroke-width="1.5"/>
+      <!-- eigenvalue axes -->
+      <line x1="114" y1="97" x2="136" y2="97" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/>
+      <line x1="125" y1="86" x2="125" y2="108" stroke="#8b5cf6" stroke-width="1.2" opacity="0.6"/>
+      <text x="143" y="100" font-size="6" fill="#8b5cf6">λ₁≈λ₂</text>
+      <text x="125" y="142" text-anchor="middle" font-size="7" fill="#16a34a" font-weight="600">dense_score → HIGH</text>
+      <text x="125" y="154" text-anchor="middle" font-size="7" fill="#8a8578">anisotropy ≈ 0.1</text>
+      <text x="125" y="164" text-anchor="middle" font-size="7" fill="#8a8578">density = 8.4</text>
+
+      <!-- REGIME 2: Gully / linear -->
+      <rect x="260" y="10" width="230" height="170" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="375" y="28" text-anchor="middle" font-size="9" fill="#d97706" font-weight="600">Linear Gully</text>
+      <text x="375" y="40" text-anchor="middle" font-size="7" fill="#8a8578">anisotropy ≈ 1, high linearity</text>
+      <!-- search radius -->
+      <circle cx="375" cy="100" r="48" fill="none" stroke="#8b5cf6" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+      <!-- linear chain of points -->
+      <circle cx="335" cy="112" r="2.5" fill="#d97706" opacity="0.6"/>
+      <circle cx="347" cy="107" r="2.5" fill="#d97706" opacity="0.7"/>
+      <circle cx="358" cy="102" r="2.5" fill="#d97706" opacity="0.7"/>
+      <circle cx="370" cy="97" r="2.5" fill="#d97706" opacity="0.7"/>
+      <circle cx="382" cy="92" r="2.5" fill="#d97706" opacity="0.6"/>
+      <circle cx="393" cy="88" r="2.5" fill="#d97706" opacity="0.7"/>
+      <circle cx="404" cy="83" r="2.5" fill="#d97706" opacity="0.6"/>
+      <circle cx="416" cy="78" r="2.5" fill="#d97706" opacity="0.5"/>
+      <!-- convex hull - thin elongated -->
+      <path d="M332,116 L418,74 L420,80 L336,120Z" fill="rgba(217,119,6,0.06)" stroke="#d97706" stroke-width="0.8" stroke-dasharray="3,2"/>
+      <!-- target point -->
+      <circle cx="375" cy="97" r="4.5" fill="#8b5cf6" stroke="#fff" stroke-width="1.5"/>
+      <!-- eigenvalue axes -->
+      <line x1="350" y1="107" x2="400" y2="87" stroke="#8b5cf6" stroke-width="1.5" opacity="0.6"/>
+      <line x1="372" y1="91" x2="378" y2="103" stroke="#8b5cf6" stroke-width="0.7" opacity="0.4"/>
+      <text x="403" y="82" font-size="6" fill="#8b5cf6">λ₁≫λ₂</text>
+      <text x="375" y="142" text-anchor="middle" font-size="7" fill="#d97706" font-weight="600">gully_score → HIGH</text>
+      <text x="375" y="154" text-anchor="middle" font-size="7" fill="#8a8578">anisotropy ≈ 0.85</text>
+      <text x="375" y="164" text-anchor="middle" font-size="7" fill="#8a8578">linearity = 12.3</text>
+
+      <!-- REGIME 3: Sparse -->
+      <rect x="510" y="10" width="260" height="170" rx="6" fill="#fff" stroke="#c5c0b6" stroke-width="0.8"/>
+      <text x="640" y="28" text-anchor="middle" font-size="9" fill="#e11d48" font-weight="600">Sparse Frontier</text>
+      <text x="640" y="40" text-anchor="middle" font-size="7" fill="#8a8578">low density, high spread</text>
+      <!-- search radius -->
+      <circle cx="640" cy="100" r="48" fill="none" stroke="#8b5cf6" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+      <!-- sparse scattered points -->
+      <circle cx="610" cy="72" r="2.5" fill="#e11d48" opacity="0.5"/>
+      <circle cx="660" cy="120" r="2.5" fill="#e11d48" opacity="0.4"/>
+      <circle cx="680" cy="85" r="2.5" fill="#e11d48" opacity="0.5"/>
+      <!-- target point -->
+      <circle cx="640" cy="97" r="4.5" fill="#8b5cf6" stroke="#fff" stroke-width="1.5"/>
+      <text x="640" y="142" text-anchor="middle" font-size="7" fill="#e11d48" font-weight="600">sparse_score → HIGH</text>
+      <text x="640" y="154" text-anchor="middle" font-size="7" fill="#8a8578">density = 0.2</text>
+      <text x="640" y="164" text-anchor="middle" font-size="7" fill="#8a8578">spread = 82m</text>
+
+      <!-- Math summary box -->
+      <rect x="520" y="60" width="120" height="62" rx="4" fill="rgba(139,92,246,0.04)" stroke="#8b5cf6" stroke-width="0.5"/>
+      <text x="580" y="74" text-anchor="middle" font-size="6.5" fill="#8b5cf6" font-weight="600">Regime scores (σ)</text>
+      <text x="580" y="86" text-anchor="middle" font-size="6" fill="#4c1d95">dense = σ(0.8d−0.03s−1.2a)</text>
+      <text x="580" y="98" text-anchor="middle" font-size="6" fill="#4c1d95">gully = σ(2a+0.6ln(1+ℓ)+0.4d)</text>
+      <text x="580" y="110" text-anchor="middle" font-size="6" fill="#4c1d95">sparse = σ(−d+0.04s)</text>
+      <text x="580" y="120" text-anchor="middle" font-size="5.5" fill="#8a8578">a=aniso d=dens s=spread ℓ=lin</text>
+    </svg>
+
+    <div class="code-block" data-file="geometric_features.py — compute_local_geometry">
+<pre><span class="cm"># Convert neighbors to local metres (flat-Earth centered on lead)</span>
+coords_m[:, <span class="nb">0</span>] = (neighbor_df[<span class="st">"longitude"</span>] - lead_lon) * meters_per_deg_lon
+coords_m[:, <span class="nb">1</span>] = (neighbor_df[<span class="st">"latitude"</span>] - lead_lat) * meters_per_deg_lat
+
+<span class="cm"># Covariance → eigenvalues → anisotropy</span>
+cov_matrix = np.cov(centered_coords, rowvar=<span class="nb">False</span>)
+eig_vals = np.sort(np.linalg.eigvals(cov_matrix))[<span class="op">::</span>-<span class="nb">1</span>]
+<span class="vr">anisotropy</span> = <span class="nb">1.0</span> - (eig_vals[<span class="nb">1</span>] / eig_vals[<span class="nb">0</span>])  <span class="cm"># 1=line, 0=blob</span>
+
+<span class="cm"># Convex hull → density</span>
+hull = <span class="fn">ConvexHull</span>(coords_m)
+density = (len(neighbor_df) / hull.volume) * <span class="nb">1000</span>  <span class="cm"># pts/m²×1000</span>
+
+<span class="cm"># Spread: RMS distance from centroid</span>
+spread = np.sqrt(np.mean(np.sum(centered_coords**<span class="nb">2</span>, axis=<span class="nb">1</span>)))
+
+<span class="cm"># Linearity ratio λ₁/λ₂ — higher = more linear</span>
+linearity = eig_vals[<span class="nb">0</span>] / (eig_vals[<span class="nb">1</span>] + <span class="nb">1e-6</span>)
+
+<span class="cm"># Three logistic regime scores</span>
+dense_score = <span class="fn">sigmoid</span>(<span class="nb">0.8</span>*density - <span class="nb">0.03</span>*spread - <span class="nb">1.2</span>*anisotropy)
+gully_score = <span class="fn">sigmoid</span>(<span class="nb">2.0</span>*anisotropy + <span class="nb">0.6</span>*np.log1p(linearity) + <span class="nb">0.4</span>*density)
+sparse_score = <span class="fn">sigmoid</span>(-<span class="nb">1.0</span>*density + <span class="nb">0.04</span>*spread)</pre>
+    </div>
+
+    <div class="code-block" data-file="step2_score_test.py — BallTree dispatch + regime derivation" style="margin-top: 8px;">
+<pre><span class="cm"># BallTree on INSTALLED training points only (GEOM_INSTALL_FILTER=1)</span>
+df_train_geom = df_train[df_train[<span class="st">"installed_decision"</span>] == <span class="nb">1</span>].copy()
+geom_features = <span class="fn">batch_compute_geometry</span>(
+    df_test, df_train_geom, radius_m=<span class="nb">100</span>  <span class="cm"># GEOM_SEARCH_RADIUS_M</span>
+)
+df_test = pd.concat([df_test.reset_index(drop=<span class="nb">True</span>), geom_features], axis=<span class="nb">1</span>)
+
+<span class="cm"># Derive regime labels from score thresholds</span>
+dense_mask  = df_test[<span class="st">"dense_score"</span>]  >= <span class="vr">0.60</span>  <span class="cm"># GEOM_DENSE_THRESHOLD</span>
+gully_mask  = df_test[<span class="st">"gully_score"</span>]  >= <span class="vr">0.70</span>  <span class="cm"># GEOM_GULLY_THRESHOLD</span>
+sparse_mask = df_test[<span class="st">"sparse_score"</span>] >= <span class="vr">0.40</span>  <span class="cm"># GEOM_SPARSE_THRESHOLD</span>
+<span class="cm"># Regime = "dense", "gully", "dense+gully", "sparse", "mixed"</span>
+
+<span class="cm"># Downstream binary flags for scoring logic</span>
+df[<span class="st">"is_sparse"</span>] = (df[<span class="st">"local_density"</span>] &lt; <span class="vr">0.5</span>).astype(int)
+df[<span class="st">"is_deep"</span>]   = (df[<span class="st">"depth_score_point_hex"</span>] > <span class="vr">200</span>).astype(int)</pre>
+    </div>
+
+    <div class="sub-steps" style="margin-top: 14px;">
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">1</span><strong>BallTree on installs</strong> — Build haversine tree on installed training points only. Per-lead radius query at 100m returns neighbor indices.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">2</span><strong>Local projection</strong> — Convert neighbor lat/lon to metres via flat-Earth approximation centered on the lead. Accurate to &lt;0.5% within 10 km.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">3</span><strong>Covariance eigensplit</strong> — 2×2 covariance matrix of projected coords → two eigenvalues. λ₁≈λ₂ = round blob. λ₁≫λ₂ = linear gully. Anisotropy = <code>1 − λ₂/λ₁</code>.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">4</span><strong>Convex hull</strong> — <code>scipy.ConvexHull</code> on 2D projected points → area in m². Density = points/area×1000. Spread = RMS distance from centroid.</div>
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">5</span><strong>Three sigmoid scores</strong> — dense_score, gully_score, sparse_score are logistic combinations of the raw descriptors. A lead can trigger multiple regimes (e.g., "dense+gully").</div>
+      <div class="sub-step"><span class="num" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">6</span><strong>Regime labeling</strong> — Thresholds (0.60, 0.70, 0.40) assign categorical labels. <code>is_sparse</code> and <code>is_deep</code> are binary flags for downstream scoring logic.</div>
+    </div>
+
+    <div class="intuition" style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.15); color: #4c1d95; margin-top: 10px;">
+      <strong>What geometry gives that nothing else can:</strong> SE tells you "this area converts at 40%." The Gaussian field tells you "the sentiment nearby is positive." Boundary depth tells you "you're safe inside the coverage zone." But <em>none of them</em> tell you about the <strong>shape</strong> of the evidence. A lead at the end of a narrow service gully (installs only along one road) is qualitatively different from a lead surrounded by installs in all directions (dense neighbourhood), even if SE and field are identical. Anisotropy, linearity, and hull area capture exactly this — the morphological confidence of the local sample.
+    </div>
+
+    <div class="intuition" style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.15); color: #4c1d95; margin-top: 6px;">
+      <strong>Why installs only?</strong> — When <code>GEOM_INSTALL_FILTER=1</code>, the BallTree is built on installed points only. The shape of the install cloud is what matters for geometry: "how are successful installations distributed around this lead?" Declines are spatially less informative for shape descriptors because they can happen anywhere — a decline 80m away along a road doesn't tell you about the <em>reach</em> of the partner's installation capability in the same way an install does.
+    </div>
+
+    <div class="io-row">
+      <span class="io-tag out">local_anisotropy</span>
+      <span class="io-tag out">local_density</span>
+      <span class="io-tag out">hull_area</span>
+      <span class="io-tag out">spread_m</span>
+      <span class="io-tag out">linearity_score</span>
+      <span class="io-tag out">dense_score</span>
+      <span class="io-tag out">gully_score</span>
+      <span class="io-tag out">sparse_score</span>
+      <span class="io-tag out">geometry_regime</span>
+      <span class="io-tag out">is_sparse</span>
+    </div>
+
+    <div class="data-section">
+      <div class="data-section-title" style="color:#8b5cf6;">
+        <span class="arrow-tag" style="background:rgba(139,92,246,0.08);color:#8b5cf6;border:1px solid rgba(139,92,246,0.2);">OUTPUT</span> geom_features — 10 rows, concat'd to df_test before process()
+      </div>
+      <div class="df-wrap">
+        <table>
+          <tr><th>mobile</th><th>local<br>_anisotropy</th><th>local<br>_density</th><th>hull<br>_area</th><th>linearity<br>_score</th><th>spread_m</th><th>dense<br>_score</th><th>gully<br>_score</th><th>sparse<br>_score</th><th>geometry<br>_regime</th><th>is_sparse</th></tr>
+          <tr><td class="col-key">M001</td><td>0.12</td><td class="hi">5.80</td><td>3200</td><td>1.1</td><td>38</td><td class="hi">0.78</td><td>0.42</td><td>0.18</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M002</td><td>0.08</td><td class="hi">8.40</td><td>5100</td><td>1.1</td><td>32</td><td class="hi">0.85</td><td>0.38</td><td>0.12</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M003</td><td class="lo">0.82</td><td>1.60</td><td>1800</td><td class="lo">5.6</td><td>55</td><td>0.35</td><td class="lo">0.76</td><td>0.31</td><td style="color:#d97706;font-weight:600">gully</td><td>0</td></tr>
+          <tr><td class="col-key">M004</td><td>0.15</td><td>4.20</td><td>4600</td><td>1.2</td><td>42</td><td class="hi">0.68</td><td>0.44</td><td>0.22</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M005</td><td class="na">0.00</td><td class="na">0.00</td><td class="na">0.0</td><td class="na">0.0</td><td class="na">0.0</td><td>0.27</td><td>0.27</td><td class="lo">0.50</td><td style="color:#e11d48;font-weight:600">sparse</td><td class="lo">1</td></tr>
+          <tr><td class="col-key">M006</td><td>0.10</td><td class="hi">9.20</td><td>6400</td><td>1.1</td><td>28</td><td class="hi">0.88</td><td>0.36</td><td>0.10</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M007</td><td>0.55</td><td>3.10</td><td>2600</td><td>2.2</td><td>48</td><td>0.52</td><td>0.65</td><td>0.28</td><td style="color:#8b5cf6;font-weight:600">mixed</td><td>0</td></tr>
+          <tr><td class="col-key">M008</td><td>0.18</td><td>4.80</td><td>3800</td><td>1.2</td><td>40</td><td class="hi">0.72</td><td>0.46</td><td>0.20</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M009</td><td>0.22</td><td>6.10</td><td>4200</td><td>1.3</td><td>36</td><td class="hi">0.76</td><td>0.48</td><td>0.16</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M010</td><td class="lo">0.70</td><td class="lo">0.40</td><td class="lo">450</td><td class="lo">3.8</td><td class="lo">72</td><td>0.18</td><td>0.58</td><td class="lo">0.62</td><td style="color:#e11d48;font-weight:600">sparse</td><td class="lo">1</td></tr>
+        </table>
+      </div>
+      <div class="intuition" style="background: rgba(139,92,246,0.06); border: 1px solid rgba(139,92,246,0.15); color: #4c1d95; font-size: 11.5px; margin-top: 4px;">
+        <strong>Read the data:</strong> M002 and M006 are the densest (density 8.4 and 9.2) — surrounded by tightly clustered installs, highest morphological confidence. M003 is a clear gully (anisotropy=0.82, linearity=5.6) — installs stretch along a line, likely a single road. M005 has zero raw features (no installs within 100m) → all defaults → sparse regime. M010 combines high anisotropy (0.70) with very low density (0.40) and wide spread (72m) → sparse + somewhat linear, the weakest geometric signal. M007 is mixed — moderate anisotropy (0.55) with decent density (3.10), doesn't cleanly fit any single regime. The <code>is_sparse</code> flag fires for M005 and M010 only (density &lt; 0.5).
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"></div>
+  <div class="merge-label">── FINAL MERGE: target + boundary + hex + all-hex field + geometry ──</div>
+  <div class="connector"></div>
+
+  <!-- ════════════════════════════════════════════════ -->
+  <!-- OUTPUT                                           -->
+  <!-- ════════════════════════════════════════════════ -->
+  <div class="node c-purple" style="animation-delay:0.35s">
+    <div class="node-body">
+      <div class="text-side">
+        <div class="node-label">OUTPUT</div>
+        <div class="node-title">df_target_final</div>
+        <div class="node-desc">Enriched mobile-level DataFrame. Geometry features concat'd before process(); all spatial tracks merged via LEFT JOINs on <code>(mobile, lat, lon)</code>.</div>
+
+        <div class="code-block" data-file="process — final assembly + geometry enrichment">
+<pre><span class="cm"># Geometry: enriched BEFORE process() in step2_score_test.py</span>
+geom_features = <span class="fn">batch_compute_geometry</span>(df_test, df_train_geom, radius_m=<span class="nb">100</span>)
+df_test = pd.concat([df_test, geom_features], axis=<span class="nb">1</span>)
+
+<span class="cm"># Chain of LEFT JOINs (inside process())</span>
+df_target_new = pd.merge(df_target, df_target_boundary,
+                          how=<span class="st">"left"</span>, on=<span class="st">"mobile"</span>)
+df_target_with_hex = pd.merge(df_target_new, df_hex_consensus,
+                               on=[<span class="st">"mobile"</span>, <span class="st">"latitude"</span>, <span class="st">"longitude"</span>],
+                               how=<span class="st">"left"</span>)
+df_target_final = pd.merge(df_target_with_hex, agg_all_hex,
+                            on=<span class="st">"mobile"</span>, how=<span class="st">"left"</span>)
+
+<span class="cm"># Backward-compat aliases for downstream scoring</span>
+df_target_final[<span class="st">"predicted_field_hex"</span>] = (
+    df_target_final[<span class="st">"predicted_field_hex_all_kswmean"</span>]
+)
+df_target_final[<span class="st">"parent_installs"</span>] = (
+    df_target_final[<span class="st">"installs"</span>]
+)</pre>
+        </div>
+
+        <div class="intuition intuition-purple">
+          <strong>Why kswmean is the default alias?</strong> — <code>predicted_field_hex_all_kswmean</code> (kernel_sum-weighted mean) outperforms both the simple mean and n_sources-weighted mean in the composite scoring decile gap. It naturally handles the case where a target sits on the fringe of one hex (low kernel_sum) but deep inside another (high kernel_sum) — the deep-hex field dominates, which is correct allocation-wise.
+        </div>
+      </div>
+      <div class="viz-side">
+        <svg class="viz" width="200" height="195" viewBox="0 0 200 195">
+          <defs>
+            <linearGradient id="gOut" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.08"/>
+              <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <rect x="4" y="4" width="192" height="187" rx="10" fill="url(#gOut)" stroke="#7c3aed" stroke-opacity="0.2"/>
+          <text x="100" y="22" text-anchor="middle" font-size="8" fill="#7c3aed" font-weight="600">~50+ columns / mobile</text>
+          <rect x="14" y="32" width="80" height="18" rx="3" fill="rgba(37,99,235,0.08)" stroke="#2563eb" stroke-width="0.7"/>
+          <text x="54" y="44" text-anchor="middle" font-size="7" fill="#2563eb">boundary (12)</text>
+          <rect x="104" y="32" width="82" height="18" rx="3" fill="rgba(225,29,72,0.08)" stroke="#e11d48" stroke-width="0.7"/>
+          <text x="145" y="44" text-anchor="middle" font-size="7" fill="#e11d48">contested (8)</text>
+          <rect x="14" y="58" width="80" height="18" rx="3" fill="rgba(13,148,136,0.08)" stroke="#0d9488" stroke-width="0.7"/>
+          <text x="54" y="70" text-anchor="middle" font-size="7" fill="#0d9488">hex SE (6)</text>
+          <rect x="104" y="58" width="82" height="18" rx="3" fill="rgba(22,163,74,0.08)" stroke="#16a34a" stroke-width="0.7"/>
+          <text x="145" y="70" text-anchor="middle" font-size="7" fill="#16a34a">hop feats (9)</text>
+          <rect x="14" y="84" width="80" height="18" rx="3" fill="rgba(139,92,246,0.08)" stroke="#8b5cf6" stroke-width="0.7"/>
+          <text x="54" y="96" text-anchor="middle" font-size="7" fill="#8b5cf6">geometry (10)</text>
+          <rect x="104" y="84" width="82" height="18" rx="3" fill="rgba(217,119,6,0.08)" stroke="#d97706" stroke-width="0.7"/>
+          <text x="145" y="96" text-anchor="middle" font-size="7" fill="#d97706">all-hex field (8)</text>
+          <rect x="14" y="110" width="172" height="18" rx="3" fill="rgba(124,58,237,0.06)" stroke="#7c3aed" stroke-width="0.7"/>
+          <text x="100" y="122" text-anchor="middle" font-size="7" fill="#7c3aed">original target columns</text>
+          <rect x="14" y="142" width="172" height="40" rx="5" fill="rgba(124,58,237,0.08)" stroke="#7c3aed" stroke-width="1"/>
+          <text x="100" y="159" text-anchor="middle" font-size="8" fill="#7c3aed" font-weight="700">→ composite scoring</text>
+          <text x="100" y="173" text-anchor="middle" font-size="7" fill="#8a8578">Dirichlet weight optimisation</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ── FINAL OUTPUT TABLE ── -->
+    <div class="data-section">
+      <div class="data-section-title" style="color:var(--accent-purple);">
+        <span class="arrow-tag arrow-out">FINAL OUTPUT</span> df_target_final — all 10 leads, all feature tracks merged (spatial + geometry)
+      </div>
+
+      <div class="df-wrap">
+        <caption>Boundary features (from add_boundary_details_precise + contested)</caption>
+        <table>
+          <tr><th>mobile</th><th>nmbr_overlap<br>_clusters</th><th>mean_dist<br>_to_edge_m</th><th>worst<br>_depth_score</th><th>any_near<br>_edge</th><th>total_area<br>_boundaries</th><th>nmbr<br>_partners</th><th>contested<br>_area_km2</th><th>contested<br>_se</th><th>contested<br>_field</th></tr>
+          <tr><td class="col-key">M001</td><td>2</td><td class="col-geo">1840</td><td class="hi">310</td><td>0</td><td>60.4</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M002</td><td>3</td><td class="col-geo">920</td><td>760</td><td>1</td><td>96.1</td><td>2</td><td class="col-rose">4.82</td><td class="col-rose">0.400</td><td class="col-rose">0.375</td></tr>
+          <tr><td class="col-key">M003</td><td>1</td><td class="col-geo lo">280</td><td class="lo">−2820</td><td>1</td><td>48.3</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M004</td><td>4</td><td class="col-geo">1350</td><td>550</td><td>0</td><td>106.5</td><td>3</td><td class="col-rose">1.15</td><td class="col-rose">0.300</td><td class="col-rose">0.264</td></tr>
+          <tr><td class="col-key">M005</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M006</td><td>1</td><td class="col-geo hi">2100</td><td class="hi">580</td><td>0</td><td>35.7</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M007</td><td>3</td><td class="col-geo">640</td><td>810</td><td>1</td><td>70.8</td><td>2</td><td class="col-rose">6.35</td><td class="col-rose">0.389</td><td class="col-rose">0.412</td></tr>
+          <tr><td class="col-key">M008</td><td>2</td><td class="col-geo hi">2600</td><td class="hi">1710</td><td>0</td><td>60.4</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M009</td><td>2</td><td class="col-geo">1100</td><td>270</td><td>0</td><td>84.0</td><td>2</td><td class="col-rose">3.60</td><td class="col-rose">0.339</td><td class="col-rose">0.351</td></tr>
+          <tr><td class="col-key">M010</td><td>1</td><td class="col-geo lo">190</td><td class="lo">−2610</td><td>1</td><td>22.5</td><td>1</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>Hex consensus features (from get_parent_hexagon, incl. shrinkage + hops)</caption>
+        <table>
+          <tr><th>mobile</th><th>weighted<br>_se_shrunk</th><th>parent<br>_color</th><th>n_covering<br>_partners</th><th>total</th><th>parent<br>_installs</th><th>depth_score<br>_point_hex</th><th>hop1_se<br>_wmean</th><th>hop2_se<br>_wmean</th><th>hop3_se<br>_wmean</th><th>se_gradient<br>_1to3</th><th>isolation<br>_ratio</th></tr>
+          <tr><td class="col-key">M001</td><td class="col-se">0.378</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>180</td><td>76</td><td>55</td><td class="col-hop">0.390</td><td class="col-hop">0.360</td><td class="col-hop">0.340</td><td>−0.050</td><td>0.15</td></tr>
+          <tr><td class="col-key">M002</td><td class="col-se hi">0.435</td><td style="color:#16a34a">lightgreen</td><td>2</td><td>315</td><td>145</td><td>190</td><td class="col-hop hi">0.450</td><td class="col-hop hi">0.430</td><td class="col-hop hi">0.400</td><td>−0.050</td><td>0.08</td></tr>
+          <tr><td class="col-key">M003</td><td class="col-se lo">0.188</td><td style="color:#d97706">orange</td><td>1</td><td>45</td><td>13</td><td class="lo">−320</td><td class="col-hop lo">0.250</td><td class="col-hop">0.280</td><td class="col-hop">0.310</td><td class="hi">+0.060</td><td class="lo">0.45</td></tr>
+          <tr><td class="col-key">M004</td><td class="col-se">0.391</td><td style="color:#d97706">orange</td><td>3</td><td>310</td><td>126</td><td>60</td><td class="col-hop">0.400</td><td class="col-hop">0.380</td><td class="col-hop">0.350</td><td>−0.050</td><td>0.12</td></tr>
+          <tr><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td>0</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M006</td><td class="col-se hi">0.478</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>220</td><td>112</td><td>90</td><td class="col-hop hi">0.480</td><td class="col-hop hi">0.460</td><td class="col-hop hi">0.420</td><td>−0.060</td><td>0.06</td></tr>
+          <tr><td class="col-key">M007</td><td class="col-se">0.316</td><td style="color:#d97706">orange</td><td>2</td><td>225</td><td>81</td><td class="lo">−245</td><td class="col-hop">0.350</td><td class="col-hop">0.330</td><td class="col-hop">0.300</td><td>−0.050</td><td>0.22</td></tr>
+          <tr><td class="col-key">M008</td><td class="col-se">0.378</td><td style="color:#16a34a">lightgreen</td><td>1</td><td>180</td><td>76</td><td class="hi">170</td><td class="col-hop">0.390</td><td class="col-hop">0.370</td><td class="col-hop">0.340</td><td>−0.050</td><td>0.13</td></tr>
+          <tr><td class="col-key">M009</td><td class="col-se">0.412</td><td style="color:#16a34a">lightgreen</td><td>2</td><td>280</td><td>121</td><td>75</td><td class="col-hop">0.420</td><td class="col-hop">0.400</td><td class="col-hop">0.370</td><td>−0.050</td><td>0.09</td></tr>
+          <tr><td class="col-key">M010</td><td class="col-se lo">0.086</td><td style="color:#e11d48">crimson</td><td>1</td><td>30</td><td>7</td><td class="lo">−365</td><td class="col-hop lo">0.200</td><td class="col-hop lo">0.230</td><td class="col-hop lo">0.260</td><td class="hi">+0.060</td><td class="lo">0.65</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>All-hex Gaussian field features (from per-hex KDE → mobile aggregation)</caption>
+        <table>
+          <tr><th>mobile</th><th>predicted_field_hex<br>(= kswmean alias)</th><th>predicted_field<br>_hex_all_wmean</th><th>predicted_field<br>_hex_all_std</th><th>n_overlapping<br>_hexes_field</th><th>total_sources<br>_all_hexes</th></tr>
+          <tr><td class="col-key">M001</td><td class="col-amber">0.4150</td><td class="col-amber">0.4150</td><td>0.000</td><td>1</td><td>22</td></tr>
+          <tr><td class="col-key">M002</td><td class="col-amber hi">0.4780</td><td class="col-amber">0.4460</td><td>0.173</td><td>2</td><td>53</td></tr>
+          <tr><td class="col-key">M003</td><td class="col-amber lo">0.1820</td><td class="col-amber lo">0.1820</td><td>0.000</td><td>1</td><td>8</td></tr>
+          <tr><td class="col-key">M004</td><td class="col-amber">0.3950</td><td class="col-amber">0.3780</td><td>0.162</td><td>3</td><td>68</td></tr>
+          <tr><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td></tr>
+          <tr><td class="col-key">M006</td><td class="col-amber hi">0.5410</td><td class="col-amber hi">0.5410</td><td>0.000</td><td>1</td><td>42</td></tr>
+          <tr><td class="col-key">M007</td><td class="col-amber">0.3680</td><td class="col-amber">0.3520</td><td>0.137</td><td>2</td><td>40</td></tr>
+          <tr><td class="col-key">M008</td><td class="col-amber">0.4280</td><td class="col-amber">0.4280</td><td>0.000</td><td>1</td><td>25</td></tr>
+          <tr><td class="col-key">M009</td><td class="col-amber">0.4560</td><td class="col-amber">0.4380</td><td>0.103</td><td>2</td><td>48</td></tr>
+          <tr><td class="col-key">M010</td><td class="col-amber lo">0.1250</td><td class="col-amber lo">0.1250</td><td>0.000</td><td>1</td><td>5</td></tr>
+        </table>
+      </div>
+
+      <div class="df-wrap">
+        <caption>Geometric pattern features (from batch_compute_geometry, pre-process enrichment)</caption>
+        <table>
+          <tr><th>mobile</th><th>local<br>_anisotropy</th><th>local<br>_density</th><th>hull<br>_area</th><th>linearity<br>_score</th><th>spread_m</th><th>dense<br>_score</th><th>gully<br>_score</th><th>sparse<br>_score</th><th>geometry<br>_regime</th><th>is_sparse</th></tr>
+          <tr><td class="col-key">M001</td><td>0.12</td><td class="hi">5.80</td><td>3200</td><td>1.1</td><td>38</td><td class="hi">0.78</td><td>0.42</td><td>0.18</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M002</td><td>0.08</td><td class="hi">8.40</td><td>5100</td><td>1.1</td><td>32</td><td class="hi">0.85</td><td>0.38</td><td>0.12</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M003</td><td class="lo">0.82</td><td>1.60</td><td>1800</td><td class="lo">5.6</td><td>55</td><td>0.35</td><td class="lo">0.76</td><td>0.31</td><td style="color:#d97706;font-weight:600">gully</td><td>0</td></tr>
+          <tr><td class="col-key">M004</td><td>0.15</td><td>4.20</td><td>4600</td><td>1.2</td><td>42</td><td class="hi">0.68</td><td>0.44</td><td>0.22</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M005</td><td class="na">0.00</td><td class="na">0.00</td><td class="na">0.0</td><td class="na">0.0</td><td class="na">0.0</td><td>0.27</td><td>0.27</td><td class="lo">0.50</td><td style="color:#e11d48;font-weight:600">sparse</td><td class="lo">1</td></tr>
+          <tr><td class="col-key">M006</td><td>0.10</td><td class="hi">9.20</td><td>6400</td><td>1.1</td><td>28</td><td class="hi">0.88</td><td>0.36</td><td>0.10</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M007</td><td>0.55</td><td>3.10</td><td>2600</td><td>2.2</td><td>48</td><td>0.52</td><td>0.65</td><td>0.28</td><td style="color:#8b5cf6;font-weight:600">mixed</td><td>0</td></tr>
+          <tr><td class="col-key">M008</td><td>0.18</td><td>4.80</td><td>3800</td><td>1.2</td><td>40</td><td class="hi">0.72</td><td>0.46</td><td>0.20</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M009</td><td>0.22</td><td>6.10</td><td>4200</td><td>1.3</td><td>36</td><td class="hi">0.76</td><td>0.48</td><td>0.16</td><td style="color:#16a34a;font-weight:600">dense</td><td>0</td></tr>
+          <tr><td class="col-key">M010</td><td class="lo">0.70</td><td class="lo">0.40</td><td class="lo">450</td><td class="lo">3.8</td><td class="lo">72</td><td>0.18</td><td>0.58</td><td class="lo">0.62</td><td style="color:#e11d48;font-weight:600">sparse</td><td class="lo">1</td></tr>
+        </table>
+      </div>
+
+      <div class="intuition intuition-purple" style="margin-top: 4px;">
+        <strong>Final picture across 10 leads — who's good, who's bad, and why:</strong>
+      </div>
+
+      <div class="df-wrap" style="margin-top: 8px;">
+        <caption>Composite score inputs side-by-side — the 5 spatial components + geometry that feed Dirichlet weight optimisation</caption>
+        <table>
+          <tr><th>mobile</th><th style="color:var(--accent-orange)">predicted<br>_field_hex</th><th style="color:var(--accent-rose)">contested<br>_field</th><th style="color:var(--accent-teal)">weighted<br>_se_shrunk</th><th style="color:var(--accent-teal)">parent<br>_color</th><th style="color:var(--accent-blue)">worst<br>_depth_score</th><th style="color:#8b5cf6">geometry<br>_regime</th><th style="color:#8b5cf6">is<br>_sparse</th><th>Verdict</th></tr>
+          <tr><td class="col-key">M001</td><td class="col-field">0.415</td><td class="na">NaN</td><td class="col-se">0.378</td><td style="color:#16a34a">green</td><td class="hi">310</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-green)">✓ Solid: deep inside, dense geometry, good SE</td></tr>
+          <tr><td class="col-key">M002</td><td class="col-field hi">0.478</td><td class="col-rose">0.375</td><td class="col-se hi">0.435</td><td style="color:#16a34a">green</td><td>760</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-green)">✓ Best: multi-partner, highest density (8.4)</td></tr>
+          <tr class="lo"><td class="col-key">M003</td><td class="col-field lo">0.182</td><td class="na">NaN</td><td class="col-se lo">0.188</td><td style="color:#d97706">orange</td><td class="lo">−2820</td><td style="color:#d97706;font-size:10px">gully</td><td>0</td><td style="font-size:11px;color:var(--accent-rose)">✗ Worst: edge, shrunk SE, linear gully shape</td></tr>
+          <tr><td class="col-key">M004</td><td class="col-field">0.395</td><td class="col-rose">0.264</td><td class="col-se">0.391</td><td style="color:#d97706">orange</td><td>550</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-amber)">△ Mixed: 3 partners, dense geometry supports it</td></tr>
+          <tr class="lo"><td class="col-key">M005</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td class="na">NaN</td><td style="color:#e11d48;font-size:10px">sparse</td><td class="lo">1</td><td style="font-size:11px;color:var(--accent-rose)">✗ No coverage + sparse geometry = frontier</td></tr>
+          <tr><td class="col-key">M006</td><td class="col-field hi">0.541</td><td class="na">NaN</td><td class="col-se hi">0.478</td><td style="color:#16a34a">green</td><td>580</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-green)">✓ Strongest: best SE+field+density (9.2)</td></tr>
+          <tr><td class="col-key">M007</td><td class="col-field">0.368</td><td class="col-rose">0.412</td><td class="col-se">0.316</td><td style="color:#d97706">orange</td><td>810</td><td style="color:#8b5cf6;font-size:10px">mixed</td><td>0</td><td style="font-size:11px;color:var(--accent-amber)">△ Contested field > hex, mixed geometry shape</td></tr>
+          <tr><td class="col-key">M008</td><td class="col-field">0.428</td><td class="na">NaN</td><td class="col-se">0.378</td><td style="color:#16a34a">green</td><td class="hi">1710</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-green)">✓ Deepest: solo cluster, dense, very safe</td></tr>
+          <tr><td class="col-key">M009</td><td class="col-field">0.456</td><td class="col-rose">0.351</td><td class="col-se">0.412</td><td style="color:#16a34a">green</td><td>270</td><td style="color:#16a34a;font-size:10px">dense</td><td>0</td><td style="font-size:11px;color:var(--accent-green)">✓ Good: 2 partners, dense, field > contested</td></tr>
+          <tr class="lo"><td class="col-key">M010</td><td class="col-field lo">0.125</td><td class="na">NaN</td><td class="col-se lo">0.086</td><td style="color:#e11d48">crimson</td><td class="lo">−2610</td><td style="color:#e11d48;font-size:10px">sparse</td><td class="lo">1</td><td style="font-size:11px;color:var(--accent-rose)">✗ Worst: edge, crimson, sparse, thin data</td></tr>
+        </table>
+      </div>
+
+      <div class="intuition intuition-purple" style="font-size: 11.5px; margin-top: 8px;">
+        <strong>Key patterns visible in the data:</strong><br>
+        <strong>Shrinkage matters:</strong> M003 (SE=0.289, n=45) → shrunk to 0.188. M010 (SE=0.22, n=30) → 0.086. But M006 (SE=0.51, n=220) → 0.478. Low-evidence hexes are correctly dampened.<br>
+        <strong>Field vs SE:</strong> M007's contested_field (0.412) is higher than its weighted_se_shrunk (0.316) — the KDE surface picks up positive source points nearby that the hex's discrete SE misses.<br>
+        <strong>Geometry confirms the story:</strong> M003's gully regime (anisotropy=0.82) explains <em>why</em> its SE is unreliable — installs stretch along one line, the lead may be off that line. M010's sparse regime (density=0.40) confirms the thin data problem — few installs exist anywhere nearby. Conversely, M006's dense regime (density=9.2) reinforces trust in its high SE.<br>
+        <strong>Four signals tell different stories:</strong> M008 has depth=1710 (boundary: very safe) + SE=0.378 (hex: decent) + field=0.428 (KDE: positive) + dense geometry (morphology: confident). All four agree → highest confidence. M004 has depth=550 (ok) + SE=0.391 (ok) + contested_se=0.300 (weak overlap) but dense geometry (4.2 density) — geometry helps break the tie by confirming the local area is well-populated with installs.<br>
+        <strong>NaN propagation:</strong> M005 has all NaN spatial features — it's outside every partner's territory. But geometry still fires: sparse regime with is_sparse=1 confirms no installs exist nearby. The downstream composite scoring handles this with a fallback prior.
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+</body>
+</html>
