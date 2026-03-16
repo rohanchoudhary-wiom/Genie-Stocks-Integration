@@ -269,3 +269,42 @@ def compute_hexes(
     )
 
     return hex_stats
+
+
+def process_single_partner(partner_id, df_train, bad_se, mid_se):
+    sub_df = df_train[df_train["partner_id"] == partner_id].copy()
+
+    if len(sub_df) < 5:
+        return []
+
+    center_lat = np.median(sub_df["latitude"])
+    center_lon = np.median(sub_df["longitude"])
+
+    best_size = find_best_hexes(
+        center_lat,
+        center_lon,
+        sub_df,
+        hex_sizes=config.HEX_GRID_SIZES,
+        radius_km=config.HEX_TILING_RADIUS_KM,
+    )
+
+    hexes = create_hex_grid(
+        center_lat,
+        center_lon,
+        radius_km=config.HEX_TILING_RADIUS_KM,
+        hex_size_km=best_size,
+    )
+
+    hex_stats = compute_hexes(
+        hexes,
+        center_lat,
+        center_lon,
+        sub_df,
+        bad_se,
+        mid_se,
+        best_size,
+        partner_id,
+        reference_date=config.TRAIN_END_DATE,
+    )
+
+    return hex_stats

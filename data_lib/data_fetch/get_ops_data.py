@@ -752,3 +752,30 @@ if __name__ == "__main__":
         "partner_ops_test_vector.csv",
     )
     
+    
+def get_active_base(start_dt: str = None, end_dt: str = None) -> pd.DataFrame:
+    start_ref = f"'{start_dt}'" if start_dt else "CURRENT_DATE"
+    end_ref = f"'{end_dt}'" if end_dt else "CURRENT_DATE"
+    query = f"""
+    SELECT
+        a.partner_id,
+        a.long_customer_account_id,
+        a.mobile,
+        a.latitude,
+        a.longitude,
+        a.location_start_time
+    FROM t_subnode_active a
+    WHERE a.latitude IS NOT NULL
+      AND a.longitude IS NOT NULL
+      and a.location_start_time >= {start_ref}
+      AND a.location_start_time <= {end_ref}
+    """
+    df = _query_snowflake_df(query)
+    if df.empty:
+        return pd.DataFrame()
+    df.columns = df.columns.str.lower()
+    df["partner_id"] = df["partner_id"].astype(str)
+    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+    print(df.columns)
+    return df.dropna(subset=["latitude", "longitude"])
