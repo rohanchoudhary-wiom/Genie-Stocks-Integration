@@ -601,6 +601,119 @@ def _compute_ops_deltas(ops: pd.DataFrame) -> pd.DataFrame:
 
 
 # =====================================================================
+# PARTNER COORDINATES — standalone, NOT part of ops vector
+# =====================================================================
+
+def get_partner_coordinates(start_dt: str, end_dt: str) -> pd.DataFrame:
+    """
+    Fetch partner hex-cluster coordinates from the Fivetran-synced
+    DynamoDB partner_coordinates table.
+
+    Filters to rows synced within [start_dt, end_dt] and not soft-deleted.
+    Returns the latest sync per partner with only the columns needed
+    downstream: partner_id, coordinates JSON, and sync timestamp.
+
+    This is saved as its own artifact (partner_coordinates.csv),
+    NOT merged into the ops vector — the raw JSON can be very large.
+
+    Returns
+    -------
+    DataFrame with columns:
+        partner_id      : str
+        coordinates     : str   — raw JSON array of cluster centroids
+        synced_at       : str   — Fivetran sync timestamp
+    """
+    query = f"""
+    SELECT
+        partner_id,
+        coordinates,
+        _fivetran_synced AS synced_at
+    FROM prod_db.dynamodb.partner_coordinates
+    WHERE _fivetran_deleted = FALSE
+      AND _fivetran_synced >= '{start_dt}'
+      AND _fivetran_synced <= '{end_dt}'
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY partner_id
+        ORDER BY _fivetran_synced DESC
+    ) = 1
+    """
+    try:
+        df = _query_snowflake_df(query)
+        if df.empty:
+            print("[get_partner_coordinates] No data found")
+            return pd.DataFrame(columns=["partner_id", "coordinates", "synced_at"])
+
+        df.columns = df.columns.str.lower()
+        df["partner_id"] = df["partner_id"].astype(str)
+        df["synced_at"] = pd.to_datetime(df["synced_at"], errors="coerce")
+
+        print(f"[get_partner_coordinates] {len(df)} partners fetched")
+        return df[["partner_id", "coordinates", "synced_at"]]
+
+    except Exception as e:
+        print(f"[get_partner_coordinates] ERROR: {e}")
+        return pd.DataFrame(columns=["partner_id", "coordinates", "synced_at"])
+
+
+def parse_partner_centers(df_coords: pd.DataFrame) -> pd.DataFrame:
+    """
+    Parse coordinates JSON into per-partner center lat/lon.
+    Kept separate so callers can choose to use raw JSON or parsed centers.
+
+    Parameters
+    ----------
+    df_coords : output of get_partner_coordinates()
+
+    Returns
+    -------
+    DataFrame: partner_id, n_clusters, center_lat, center_lon
+    """
+    import json
+
+    if df_coords.empty:
+        return pd.DataFrame(columns=["partner_id", "n_clusters", "center_lat", "center_lon"])
+
+    records = []
+    for _, row in df_coords.iterrows():
+        pid = row["partner_id"]
+        raw = row.get("coordinates", None)
+
+        if pd.isna(raw) or not raw:
+            records.append({"partner_id": pid, "n_clusters": 0,
+                            "center_lat": np.nan, "center_lon": np.nan})
+            continue
+
+        try:
+            clusters = json.loads(raw) if isinstance(raw, str) else raw
+            centroids = [c["centroid"] for c in clusters if "centroid" in c]
+
+            if not centroids:
+                records.append({"partner_id": pid, "n_clusters": 0,
+                                "center_lat": np.nan, "center_lon": np.nan})
+                continue
+
+            lats = [c[0] for c in centroids]
+            lons = [c[1] for c in centroids]
+            records.append({
+                "partner_id": pid,
+                "n_clusters": len(centroids),
+                "center_lat": round(np.mean(lats), 8),
+                "center_lon": round(np.mean(lons), 8),
+            })
+
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            print(f"[parse_partner_centers] Parse error for {pid}: {e}")
+            records.append({"partner_id": pid, "n_clusters": 0,
+                            "center_lat": np.nan, "center_lon": np.nan})
+
+    result = pd.DataFrame(records)
+    n_valid = result["center_lat"].notna().sum()
+    print(f"[parse_partner_centers] {n_valid}/{len(result)} partners with valid centers, "
+          f"median clusters: {result['n_clusters'].median():.0f}")
+    return result
+
+
+# =====================================================================
 # COMBINED: build_partner_ops_vector
 # =====================================================================
 
@@ -608,6 +721,10 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
     """
     Master function: pulls all operational data, computes features,
     returns one row per partner_id with the full ops vector.
+
+    NOTE: Partner coordinates are NOT included here — they are fetched
+    and saved separately via get_partner_coordinates() to keep the ops
+    vector lean. See __main__ below.
 
     Temporal columns per window in config.TEMPORAL_WINDOWS:
         se_{wd}d, decline_rate_{wd}d, median_response_min_{wd}d,
@@ -719,13 +836,13 @@ def build_partner_ops_vector(start_dt: str, end_dt: str) -> pd.DataFrame:
 # __main__ — run standalone
 # =====================================================================
 
- 
+
 if __name__ == "__main__":
     import os
- 
+
     OUT_DIR = "reports"
     os.makedirs(OUT_DIR, exist_ok=True)
- 
+
     def _build_and_save(label: str, start_dt: str, end_dt: str, filename: str):
         print(f"\n{'='*60}")
         print(f"  {label}: {start_dt} → {end_dt}")
@@ -742,7 +859,22 @@ if __name__ == "__main__":
             n_valid = df[c].notna().sum()
             print(f"  {c:>40s}: {n_valid}/{len(df)}")
         return df
- 
+
+    def _save_coordinates(label: str, start_dt: str, end_dt: str, filename: str):
+        """Fetch and save partner coordinates as a separate artifact."""
+        print(f"\n{'='*60}")
+        print(f"  {label} COORDINATES: {start_dt} → {end_dt}")
+        print(f"{'='*60}")
+        df = get_partner_coordinates(start_dt, end_dt)
+        if df.empty:
+            print(f"[{label}] No coordinates found.")
+            return df
+        path = os.path.join(OUT_DIR, filename)
+        df.to_csv(path, index=False)
+        print(f"[{label}] Saved {len(df)} partners → {path}")
+        return df
+
+    # ── Ops vectors (lean, no coordinates) ──
     df_ops_train = _build_and_save(
         "TRAIN", config.TRAIN_START_DATE, config.TRAIN_END_DATE,
         "partner_ops_train_vector.csv",
@@ -751,4 +883,9 @@ if __name__ == "__main__":
         "TEST", config.TEST_START_DATE, config.TEST_END_DATE,
         "partner_ops_test_vector.csv",
     )
-    
+
+    # ── Partner coordinates (separate file) ──
+    df_coords = _save_coordinates(
+        "TRAIN", config.TRAIN_START_DATE, config.TRAIN_END_DATE,
+        "partner_coordinates.csv",
+    )
