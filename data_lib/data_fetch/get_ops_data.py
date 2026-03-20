@@ -45,7 +45,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
             added_time                                 AS decline_time,
             ROW_NUMBER() OVER (
                 PARTITION BY mobile, TRY_PARSE_JSON(data):partner_id::STRING
-                ORDER BY added_time ASC
+                ORDER BY added_time desc
             ) AS rn
         FROM prod_db.public.task_logs
         WHERE event_name IN ('DECLINED','NOT_INTERESTED')
@@ -58,7 +58,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
             added_time                                    AS install_time,
             ROW_NUMBER() OVER (
                 PARTITION BY mobile, TRY_PARSE_JSON(data):lco_account_id::STRING
-                ORDER BY added_time ASC
+                ORDER BY added_time desc
             ) AS rn
         FROM prod_db.public.booking_logs
         WHERE event_name = 'lead_state_changed'
@@ -72,7 +72,7 @@ def get_pending_leads_per_partner(start_dt: str, end_dt: str) -> pd.DataFrame:
             added_time                                    AS cancel_time,
             ROW_NUMBER() OVER (
                 PARTITION BY mobile, TRY_PARSE_JSON(data):lco_account_id::STRING
-                ORDER BY added_time ASC
+                ORDER BY added_time desc
             ) AS rn
         FROM prod_db.public.booking_logs
         WHERE event_name = 'lead_state_changed'
